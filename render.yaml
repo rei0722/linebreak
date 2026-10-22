@@ -1,0 +1,11 @@
+# Render Blueprint: New > Blueprint > point at this repo
+services:
+  - type: web
+    name: linebreak
+    runtime: docker
+    plan: starter # the free plan sleeps when idle, which drops live rooms
+    healthCheckPath: /healthz
+    numInstances: 1
+    envVars:
+      - key: ALLOWED_ORIGINS
+        sync: false

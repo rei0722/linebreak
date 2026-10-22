@@ -1,0 +1,377 @@
+/* LINEBREAK design tokens and base styles.
+   One dark, plum-tinted stage; the board is the brightest thing on screen. */
+
+:root {
+  /* surfaces */
+  --stage: #1d1830;
+  --stage-deep: #161227;
+  --panel: #241e3b;
+  --panel-raised: #2c2549;
+  --well: #110e1e;
+  --line: #3a3258;
+  --line-soft: #2d2747;
+  /* text */
+  --text: #efebf7;
+  --text-dim: #a79fc0;
+  --text-faint: #6f6791;
+  /* signals */
+  --you: #ffb547;
+  --you-ink: #2a1a00;
+  --danger: #ff5d73;
+  --ok: #63d86b;
+
+  /* piece colours (also used in canvas code via render.ts) */
+  --p-i: #3fd0e0;
+  --p-o: #f5cd3d;
+  --p-t: #b56cf0;
+  --p-s: #63d86b;
+  --p-z: #f2566a;
+  --p-j: #4c7df5;
+  --p-l: #f59342;
+
+  /* type */
+  --font-num: 'Archivo', 'Zen Kaku Gothic New', system-ui, sans-serif;
+  --font-ui: 'Zen Kaku Gothic New', 'Hiragino Sans', 'Yu Gothic UI', system-ui, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 24px;
+
+  /* space: 4px base */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  /* radius: small for controls, none for the board */
+  --r-ctl: 6px;
+  --r-panel: 10px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 120ms;
+  --t-med: 220ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--stage);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--you);
+  outline-offset: 2px;
+}
+
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ controls */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  height: 44px;
+  padding: 0 var(--s5);
+  border-radius: var(--r-ctl);
+  border: 1px solid var(--line);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast),
+    transform var(--t-fast);
+  user-select: none;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: #352d57;
+  border-color: #4a416e;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--you);
+  border-color: var(--you);
+  color: var(--you-ink);
+}
+.btn-primary:hover:not(:disabled) {
+  background: #ffc46b;
+  border-color: #ffc46b;
+}
+.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  padding: 0 var(--s3);
+  height: 36px;
+}
+.btn-quiet:hover:not(:disabled) {
+  background: var(--panel);
+  border-color: transparent;
+  color: var(--text);
+}
+.btn-sm {
+  height: 32px;
+  padding: 0 var(--s3);
+  font-size: var(--fs-sm);
+}
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: transparent;
+}
+
+.field {
+  height: 44px;
+  width: 100%;
+  padding: 0 var(--s3);
+  border-radius: var(--r-ctl);
+  border: 1px solid var(--line);
+  background: var(--well);
+  transition: border-color var(--t-fast);
+}
+.field:hover {
+  border-color: #4a416e;
+}
+.field:focus {
+  outline: none;
+  border-color: var(--you);
+}
+.field::placeholder {
+  color: var(--text-faint);
+}
+
+.label {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  margin-bottom: var(--s2);
+}
+
+kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: var(--font-num);
+  font-size: var(--fs-xs);
+  text-align: center;
+  color: var(--text);
+  background: var(--stage-deep);
+}
+
+/* ------------------------------------------------------------ top bar */
+
+.topbar {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: 0 var(--s5);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--stage-deep);
+}
+.wordmark {
+  font-family: var(--font-num);
+  font-weight: 800;
+  font-stretch: 125%;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wordmark-mark {
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  gap: 2px;
+}
+.wordmark-mark i {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+}
+.topbar-spacer {
+  flex: 1;
+}
+.topbar-room {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.topbar-room b {
+  font-family: var(--font-num);
+  font-stretch: 112%;
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.conn::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.conn[data-s='open']::before {
+  background: var(--ok);
+}
+.conn[data-s='connecting']::before,
+.conn[data-s='reconnecting']::before {
+  background: var(--you);
+  animation: blink 1s steps(2) infinite;
+}
+.conn[data-s='failed']::before {
+  background: var(--danger);
+}
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* banner for connection trouble, always above the game */
+.netbanner {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  border-radius: var(--r-ctl);
+  background: var(--panel-raised);
+  border: 1px solid var(--you);
+  font-size: var(--fs-sm);
+  box-shadow: 0 8px 24px rgba(8, 5, 18, 0.5);
+}
+.netbanner[data-s='failed'] {
+  border-color: var(--danger);
+}
+
+/* ------------------------------------------------------------ screens */
+
+.screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.screen-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.toast {
+  position: fixed;
+  bottom: var(--s5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: var(--s2) var(--s4);
+  border-radius: var(--r-ctl);
+  background: var(--text);
+  color: var(--stage-deep);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  animation: toast-in var(--t-med) var(--ease-out);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(17, 14, 30, 0.72);
+  z-index: 30;
+  animation: fade var(--t-med) var(--ease-out);
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  padding: var(--s5);
+  box-shadow: 0 24px 64px rgba(8, 5, 18, 0.6);
+}
+.dialog h2 {
+  margin: 0 0 var(--s4);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+.dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin-top: var(--s5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

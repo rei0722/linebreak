@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npx vite build",
+  "outputDirectory": "client/dist",
+  "rewrites": [{ "source": "/(room/.*|solo)", "destination": "/index.html" }]
+}
