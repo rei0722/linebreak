@@ -1,11 +1,12 @@
-# Render Blueprint: New > Blueprint > point at this repo
+# Render Blueprint: Dashboard > New > Blueprint > pick this repository > Apply.
+# The game is then live at https://<name>.onrender.com and invites look like /room/AB12CD.
 services:
   - type: web
     name: linebreak
     runtime: docker
-    plan: starter # the free plan sleeps when idle, which drops live rooms
+    # free: sleeps after ~15 min without traffic (first visit then takes ~1 min, idle rooms are lost).
+    # starter: always on. Switch here or in the dashboard.
+    plan: free
     healthCheckPath: /healthz
     numInstances: 1
-    envVars:
-      - key: ALLOWED_ORIGINS
-        sync: false
+    autoDeploy: true
