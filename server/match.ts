@@ -3,7 +3,17 @@
 
 import { Game, Input, MAX_INPUT_CODE, SPECTATOR_ROWS, type GarbageChunk } from '../shared/engine/game';
 import { BATTLE_RULES, HIDDEN_H, TICK_MS, type Handling, type Rules } from '../shared/engine/rules';
-import type { BoardSnap, ClientMsg, MatchInfo, ResultRow, RoomSettings, ServerMsg } from '../shared/protocol';
+import {
+  PAUSE_LIMIT_MS,
+  RESUME_COUNTDOWN_MS,
+  type BoardSnap,
+  type ClientMsg,
+  type MatchInfo,
+  type PauseInfo,
+  type ResultRow,
+  type RoomSettings,
+  type ServerMsg,
+} from '../shared/protocol';
 
 /** Client may run at most this far ahead of the server clock (clock skew allowance). */
 export const AHEAD_TOLERANCE = 30;
@@ -50,6 +60,8 @@ export interface MatchHost {
   send(playerId: string, msg: ServerMsg): void;
   broadcast(msg: ServerMsg): void;
   ended(results: ResultRow[]): void;
+  /** Room view changed in a way clients must see at once (pause state). */
+  roomChanged(): void;
 }
 
 export class Match {
@@ -61,6 +73,15 @@ export class Match {
   private rr = 0;
   private lastSnapshotAt = 0;
   finished = false;
+  // ------------------------------------------------------------ pause state
+  /** Server epoch ms when the match clock froze; null while running. */
+  private pausedAt: number | null = null;
+  private pausedBy: string | null = null;
+  private pausedByName = '';
+  /** Server epoch ms when play resumes, once a resume has begun. */
+  private resumeAt: number | null = null;
+  /** startAt to apply when the resume countdown ends. */
+  private pendingStartAt: number | null = null;
 
   constructor(
     id: number,
@@ -96,7 +117,67 @@ export class Match {
   }
 
   serverTick(now: number): number {
+    if (this.pausedAt !== null) {
+      // frozen: time stands at the pause moment until the resume countdown ends
+      if (this.resumeAt === null || now < this.resumeAt)
+        return Math.floor((this.pausedAt - this.info.startAt) / TICK_MS);
+      return Math.floor((now - (this.pendingStartAt ?? this.info.startAt)) / TICK_MS);
+    }
     return Math.floor((now - this.info.startAt) / TICK_MS);
+  }
+
+  get paused(): boolean {
+    return this.pausedAt !== null;
+  }
+
+  pauseInfo(): PauseInfo | null {
+    if (this.pausedAt === null || this.pausedBy === null) return null;
+    return {
+      by: this.pausedBy,
+      name: this.pausedByName,
+      at: this.pausedAt,
+      resumeAt: this.resumeAt,
+      startAt: this.resumeAt !== null ? (this.pendingStartAt ?? this.info.startAt) : this.info.startAt,
+    };
+  }
+
+  /** Any participant may freeze the whole match; the clock stops for everyone. */
+  requestPause(pid: string, now: number) {
+    if (this.finished || this.pausedAt !== null) return;
+    const p = this.players.get(pid);
+    if (!p) return;
+    if (this.serverTick(now) < 0) return; // still counting down to the start
+    this.pausedAt = now;
+    this.pausedBy = pid;
+    this.pausedByName = p.name;
+    this.host.roomChanged();
+  }
+
+  /** Only the player who paused may resume (the 60s limit resumes regardless). */
+  requestResume(pid: string, now: number) {
+    if (this.pausedAt === null || this.resumeAt !== null) return;
+    if (pid !== this.pausedBy) return;
+    this.beginResume(now);
+  }
+
+  private beginResume(now: number) {
+    if (this.pausedAt === null || this.resumeAt !== null) return;
+    this.resumeAt = now + RESUME_COUNTDOWN_MS;
+    this.pendingStartAt = this.info.startAt + (this.resumeAt - this.pausedAt);
+    // time spent paused (or counting down) does not eat the disconnect grace
+    for (const p of this.players.values()) {
+      if (p.disconnectedAt !== null)
+        p.disconnectedAt += this.resumeAt - Math.max(this.pausedAt, p.disconnectedAt);
+    }
+    this.host.roomChanged();
+  }
+
+  private clearPause() {
+    this.pausedAt = null;
+    this.pausedBy = null;
+    this.pausedByName = '';
+    this.resumeAt = null;
+    this.pendingStartAt = null;
   }
 
   private random(n: number): number {
@@ -114,6 +195,11 @@ export class Match {
   handleInput(pid: string, msg: InputMsg, now: number) {
     const p = this.players.get(pid);
     if (!p || !p.alive || this.finished) return;
+    if (this.resumeAt !== null) return; // resume countdown: inputs wait for the restart
+    // Paused: batches sent just before the freeze may still land; accept them up
+    // to the frozen tick and drop anything stamped beyond it (the client
+    // resyncs after the resume if its local timeline ran ahead).
+    if (this.pausedAt !== null && msg.upto > this.serverTick(now)) return;
     if (msg.m !== this.info.id || msg.e !== p.epoch) return; // stale match or pre-resync batch
     if (msg.seq <= p.seq) return; // duplicate / replayed
 
@@ -241,12 +327,15 @@ export class Match {
     p.dirty = true;
     this.alive--;
     this.host.broadcast({ t: 'ko', m: this.info.id, id: p.id, place: p.place, by: p.lastAttacker });
+    // if the player who paused is out, do not leave everyone frozen
+    if (this.pausedBy === p.id && this.pausedAt !== null && this.resumeAt === null) this.beginResume(now);
     if (this.alive <= 1) this.finish(now);
   }
 
   private finish(now: number) {
     if (this.finished) return;
     this.finished = true;
+    this.clearPause();
     for (const p of this.players.values()) {
       if (p.alive) {
         p.alive = false;
@@ -313,6 +402,18 @@ export class Match {
   /** Called periodically (~20Hz). */
   update(now: number) {
     if (this.finished) return;
+    if (this.pausedAt !== null) {
+      if (this.resumeAt === null) {
+        // frozen: nothing advances, nobody times out; the limit resumes play
+        if (now - this.pausedAt >= PAUSE_LIMIT_MS) this.beginResume(now);
+        return;
+      }
+      if (now < this.resumeAt) return; // resume countdown running
+      // countdown over: shift the match clock by the time spent away
+      this.info.startAt = this.pendingStartAt ?? this.info.startAt;
+      this.clearPause();
+      this.host.roomChanged();
+    }
     const st = this.serverTick(now);
     if (st < 0) return;
     for (const p of this.players.values()) {

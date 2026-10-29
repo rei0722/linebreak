@@ -131,11 +131,13 @@ export class RoomSession {
         this.patch({ you: m.you, room: m.room, error: null, fatal: false });
         // rejoining a running match: the server follows up with a resync for this runner
         if (m.room.match && m.room.phase !== 'lobby') this.startRunner(m.room.match);
+        this.state.runner?.syncPause(m.room.pause);
         break;
       }
       case 'room':
         this.patch({ room: m.room });
         if (m.room.match && m.room.phase !== 'lobby') this.startRunner(m.room.match);
+        this.state.runner?.syncPause(m.room.pause);
         break;
       case 'countdown':
         this.startRunner(m.match);
@@ -181,6 +183,12 @@ export class RoomSession {
   }
   start() {
     this.conn.send({ t: 'start' });
+  }
+  pause() {
+    this.conn.send({ t: 'pause' });
+  }
+  resume() {
+    this.conn.send({ t: 'resume' });
   }
   kick(id: string) {
     this.conn.send({ t: 'kick', id });

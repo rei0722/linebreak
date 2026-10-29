@@ -72,6 +72,10 @@ export class Room implements MatchHost {
     for (const p of this.players.values()) p.conn?.send(msg);
   }
 
+  roomChanged() {
+    this.broadcastRoom();
+  }
+
   ended(results: ResultRow[]) {
     this.lastResults = results;
     const winner = results.find((r) => r.place === 1);
@@ -107,6 +111,7 @@ export class Room implements MatchHost {
         })),
       settings: this.settings,
       match: this.match ? this.match.info : null,
+      pause: this.match ? this.match.pauseInfo() : null,
       lastResults: this.lastResults,
     };
   }
@@ -201,6 +206,12 @@ export class Room implements MatchHost {
       }
       case 'start':
         return this.start(p);
+      case 'pause':
+        if (this.phase === 'playing' && this.match) this.match.requestPause(p.id, this.now());
+        return null;
+      case 'resume':
+        if (this.phase === 'playing' && this.match) this.match.requestResume(p.id, this.now());
+        return null;
       case 'in': {
         // the 50ms room ticker may not have flipped the phase yet when the first batch arrives
         const now = this.now();

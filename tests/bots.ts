@@ -28,6 +28,7 @@ for (let i = 0; i < Number(countArg ?? 7); i++) {
     }
     if (m.t === 'room' && m.room.phase === 'lobby' && !m.room.players.find((p) => p.name === NAMES[i % NAMES.length])?.ready)
       conn.send({ t: 'ready', ready: true });
+    if ((m.t === 'room' || m.t === 'welcome') && runner) runner.syncPause(m.room.pause);
     if (m.t === 'countdown') runner = new MatchRunner(m.match, DEFAULT_HANDLING, (x) => conn.send(x), () => conn.serverNow());
     if (m.t === 'error') console.log(NAMES[i], m.code, m.msg);
   });

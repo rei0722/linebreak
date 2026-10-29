@@ -3,7 +3,7 @@
 
 import { Game, Input, type GarbageChunk } from '../../../shared/engine/game';
 import { BATTLE_RULES, TICK_MS, type Handling } from '../../../shared/engine/rules';
-import type { ClientMsg, MatchInfo, ServerMsg, WireInput } from '../../../shared/protocol';
+import type { ClientMsg, MatchInfo, PauseInfo, ServerMsg, WireInput } from '../../../shared/protocol';
 
 export const SEND_INTERVAL_MS = 50;
 /** Never simulate more than this many ticks in one update (keeps a frame bounded). */
@@ -16,6 +16,10 @@ export class MatchRunner {
   private buffer: WireInput[] = [];
   private lastSend = 0;
   private stopped = false;
+  /** Server epoch ms the shared clock is frozen at, while the match is paused. */
+  private pauseFreezeAt: number | null = null;
+  /** Server epoch ms play resumes, once a resume countdown has begun. */
+  private resumeUntil: number | null = null;
   /** Called after a resync so the UI can drop transient effects. */
   onReset: (() => void) | null = null;
 
@@ -32,7 +36,35 @@ export class MatchRunner {
 
   /** Current tick on the shared clock (negative during countdown). */
   clockTick(): number {
-    return Math.floor((this.serverNow() - this.info.startAt) / TICK_MS);
+    const now =
+      this.pauseFreezeAt !== null ? Math.min(this.serverNow(), this.pauseFreezeAt) : this.serverNow();
+    return Math.floor((now - this.info.startAt) / TICK_MS);
+  }
+
+  /** True while the match is frozen or counting down to resume. */
+  isPaused(): boolean {
+    return this.pauseFreezeAt !== null || (this.resumeUntil !== null && this.serverNow() < this.resumeUntil);
+  }
+
+  /** Follow the room's shared pause state (drives the local clock). */
+  syncPause(pause: PauseInfo | null) {
+    if (!pause) {
+      this.pauseFreezeAt = null;
+      this.resumeUntil = null;
+      return;
+    }
+    if (pause.resumeAt !== null) {
+      if (this.resumeUntil !== pause.resumeAt) {
+        // resume begun: adopt the shifted start time; the clock reaches the
+        // frozen tick exactly when the countdown ends, so nothing jumps
+        this.info.startAt = pause.startAt;
+        this.resumeUntil = pause.resumeAt;
+        this.pauseFreezeAt = null;
+      }
+    } else if (this.pauseFreezeAt !== pause.at) {
+      this.pauseFreezeAt = pause.at;
+      this.resumeUntil = null;
+    }
   }
 
   get started() {
@@ -46,7 +78,7 @@ export class MatchRunner {
   }
 
   input(code: number) {
-    if (this.stopped || !this.started || this.game.over) return;
+    if (this.stopped || !this.started || this.game.over || this.isPaused()) return;
     const t = this.catchUp();
     this.game.input(code);
     this.buffer.push([t, code]);
@@ -57,6 +89,12 @@ export class MatchRunner {
   update(now = Date.now()) {
     if (this.stopped || !this.started) return;
     this.catchUp();
+    // while frozen, keep pre-pause inputs buffered; they go out after the resume
+    if (this.pauseFreezeAt !== null) return;
+    if (this.resumeUntil !== null) {
+      if (this.serverNow() < this.resumeUntil) return;
+      this.resumeUntil = null; // countdown over: play (and sending) resumes below
+    }
     if (now - this.lastSend >= SEND_INTERVAL_MS) this.flush(now);
   }
 
