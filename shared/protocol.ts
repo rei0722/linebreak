@@ -31,8 +31,6 @@ export const DEFAULT_SETTINGS: RoomSettings = {
 
 export type Phase = 'lobby' | 'countdown' | 'playing';
 
-/** A match pause lasts at most this long before it resumes on its own. */
-export const PAUSE_LIMIT_MS = 60_000;
 /** Play resumes this long after a resume begins, so nobody is caught mid-drop. */
 export const RESUME_COUNTDOWN_MS = 3_000;
 

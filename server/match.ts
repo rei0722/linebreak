@@ -4,7 +4,6 @@
 import { Game, Input, MAX_INPUT_CODE, SPECTATOR_ROWS, type GarbageChunk } from '../shared/engine/game';
 import { BATTLE_RULES, HIDDEN_H, TICK_MS, type Handling, type Rules } from '../shared/engine/rules';
 import {
-  PAUSE_LIMIT_MS,
   RESUME_COUNTDOWN_MS,
   type BoardSnap,
   type ClientMsg,
@@ -153,7 +152,7 @@ export class Match {
     this.host.roomChanged();
   }
 
-  /** Only the player who paused may resume (the 60s limit resumes regardless). */
+  /** Only the player who paused may resume; there is no time limit on a pause. */
   requestResume(pid: string, now: number) {
     if (this.pausedAt === null || this.resumeAt !== null) return;
     if (pid !== this.pausedBy) return;
@@ -404,8 +403,7 @@ export class Match {
     if (this.finished) return;
     if (this.pausedAt !== null) {
       if (this.resumeAt === null) {
-        // frozen: nothing advances, nobody times out; the limit resumes play
-        if (now - this.pausedAt >= PAUSE_LIMIT_MS) this.beginResume(now);
+        // frozen: nothing advances and nobody times out, for as long as it takes
         return;
       }
       if (now < this.resumeAt) return; // resume countdown running

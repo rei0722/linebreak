@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { VISIBLE_H } from '../../../shared/engine/rules';
-import { PAUSE_LIMIT_MS, type BoardSnap, type PauseInfo, type PlayerView, type ResultRow, type RoomView } from '../../../shared/protocol';
+import type { BoardSnap, PauseInfo, PlayerView, ResultRow, RoomView } from '../../../shared/protocol';
 import { sfx } from '../game/audio';
 import { GameView } from '../game/GameView';
 import { COLORS, drawMini, setupCanvas } from '../game/render';
@@ -625,7 +625,7 @@ function PausePanel({ session, s, pause }: { session: RoomSession; s: SessionSta
       {pause.resumeAt !== null ? (
         <p className="muted">あと {Math.max(0, Math.ceil((pause.resumeAt - now) / 1000))} 秒で再開します。</p>
       ) : (
-        <p className="muted">あと約 {Math.max(0, Math.ceil((pause.at + PAUSE_LIMIT_MS - now) / 1000))} 秒で自動的に再開します。</p>
+        <p className="muted">再開するまで止まったままになります。</p>
       )}
       <div className="dialog-actions">
         {mine && pause.resumeAt === null && (

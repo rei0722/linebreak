@@ -140,7 +140,7 @@ Latency isn't zero: opponent boards run behind by one-way delay plus up to 100 m
 - Synced countdown, 2–16 player battles, opponent mini boards (2-column layout, auto-sized), incoming-garbage meter, hit effects
 - Line clear flash, hard drop trail, attack name pop-up, elimination rank display, winner and final rankings screen, rematch, win count
 - Disconnect banner, auto-reconnect (exponential backoff), seat restore after reload, spectating for players who join mid-match
-- Shared pause in battles: any player can freeze the match for everyone from the Esc menu; only they can resume (with a 3-second countdown), and a pause auto-resumes after 60 seconds
+- Shared pause in battles: any player can freeze the match for everyone from the Esc menu; only they can resume (with a 3-second countdown), and a pause has no time limit
 - Sound effects (synthesized with WebAudio, toggle saved), handling settings (DAS/ARR/soft drop speed)
 - Arrow and Space keys don't scroll the page, OS key repeat is ignored, held keys are released when the window loses focus, and an empty `e.code` falls back to `e.key`
 - Responsive down to about 1280×720 (more compact below that)
