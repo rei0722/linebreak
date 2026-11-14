@@ -31,6 +31,23 @@ export const DEFAULT_SETTINGS: RoomSettings = {
 
 export type Phase = 'lobby' | 'countdown' | 'playing';
 
+/** Play resumes this long after a resume begins, so nobody is caught mid-drop. */
+export const RESUME_COUNTDOWN_MS = 3_000;
+
+/** Shared pause state: while `resumeAt` is null the match clock is frozen at `at`. */
+export interface PauseInfo {
+  /** player who paused */
+  by: string;
+  /** their display name */
+  name: string;
+  /** Server epoch ms when the match clock froze. */
+  at: number;
+  /** Server epoch ms when play resumes, once a resume has begun. */
+  resumeAt: number | null;
+  /** Effective match start time; shifted forward when a resume begins. */
+  startAt: number;
+}
+
 export interface PlayerView {
   id: string;
   name: string;
@@ -49,6 +66,8 @@ export interface RoomView {
   settings: RoomSettings;
   /** Set during countdown/playing. */
   match: MatchInfo | null;
+  /** Set while a match is paused (or counting down to resume). */
+  pause: PauseInfo | null;
   lastResults: ResultRow[] | null;
 }
 
@@ -112,6 +131,8 @@ export type ClientMsg =
   | { t: 'name'; name: string }
   | { t: 'settings'; settings: Partial<RoomSettings> }
   | { t: 'start' }
+  | { t: 'pause' }
+  | { t: 'resume' }
   | { t: 'kick'; id: string }
   | { t: 'ping'; c: number }
   | {

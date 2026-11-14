@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { VISIBLE_H } from '../../../shared/engine/rules';
-import type { BoardSnap, PlayerView, ResultRow, RoomView } from '../../../shared/protocol';
+import type { BoardSnap, PauseInfo, PlayerView, ResultRow, RoomView } from '../../../shared/protocol';
 import { bestMove } from '../game/ai';
 import { sfx } from '../game/audio';
 import { GameView } from '../game/GameView';
@@ -641,6 +641,50 @@ function OpponentColumn({
   );
 }
 
+/** Shown to everyone while a match is paused; ticks down the resume timers. */
+function PausePanel({ session, s, pause }: { session: RoomSession; s: SessionState; pause: PauseInfo }) {
+  const [now, setNow] = useState(() => session.conn.serverNow());
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  useEffect(() => {
+    const t = setInterval(() => setNow(session.conn.serverNow()), 200);
+    return () => clearInterval(t);
+  }, [session]);
+  const mine = pause.by === s.you;
+  return (
+    <div className="board-panel">
+      <h2>一時停止中</h2>
+      <p className="muted">{mine ? 'あなたが対戦を止めました。全員止まっています。' : `${pause.name}さんが対戦を止めました。全員止まっています。`}</p>
+      {pause.resumeAt !== null ? (
+        <p className="muted">あと {Math.max(0, Math.ceil((pause.resumeAt - now) / 1000))} 秒で再開します。</p>
+      ) : (
+        <p className="muted">再開するまで止まったままになります。</p>
+      )}
+      <div className="dialog-actions">
+        {mine && pause.resumeAt === null && (
+          <button className="btn btn-primary" autoFocus onClick={() => session.resume()}>
+            再開する
+          </button>
+        )}
+        {confirmLeave ? (
+          <button
+            className="btn btn-danger"
+            onClick={() => {
+              session.leave();
+              navigate('/');
+            }}
+          >
+            本当に退出する（脱落扱い）
+          </button>
+        ) : (
+          <button className="btn" onClick={() => setConfirmLeave(true)}>
+            部屋から退出する
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Arena({ session, s, room }: { session: RoomSession; s: SessionState; room: RoomView }) {
   const vp = useViewport();
   const runnerRef = useRef(s.runner!);
@@ -656,6 +700,7 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
   const incomingRef = useRef<HTMLDivElement>(null);
   const roomRef = useRef(room);
   roomRef.current = room;
+  const pause = room.pause;
 
   useEffect(
     () =>
@@ -781,7 +826,7 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
         source={source}
         cell={layout.cell}
         onMenu={() => !s.results && setMenu((m) => !m)}
-        inputEnabled={!out && !s.results}
+        inputEnabled={!out && !s.results && !pause}
         onController={(k) => (session.keyboard = k)}
         mode="battle"
         leftExtra={<div className="incoming" ref={incomingRef} aria-live="polite" />}
@@ -792,12 +837,23 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
             <p>脱落しました。ほかのプレイヤーの対戦を観戦しています。</p>
           </div>
         )}
-        {menu && !s.results && (
+        {pause && !s.results && <PausePanel session={session} s={s} pause={pause} />}
+        {menu && !pause && !s.results && (
           <div className="board-panel">
             <h2>メニュー</h2>
-            <p className="muted">対戦中は一時停止できません。ゲームは進行しています。</p>
+            <p className="muted">一時停止すると、対戦相手全員が止まります。</p>
             <div className="dialog-actions">
-              <button className="btn btn-primary" autoFocus onClick={() => setMenu(false)}>
+              <button
+                className="btn btn-primary"
+                autoFocus
+                onClick={() => {
+                  setMenu(false);
+                  session.pause();
+                }}
+              >
+                みんなで一時停止する
+              </button>
+              <button className="btn" onClick={() => setMenu(false)}>
                 対戦に戻る
               </button>
               {confirmLeave ? (
@@ -837,7 +893,11 @@ function Spectate({ session, room }: { session: RoomSession; room: RoomView }) {
   }
   return (
     <div className="spectate">
-      <p className="spectate-note">対戦中です。この対戦が終わると、次の対戦から参加できます。</p>
+      <p className="spectate-note">
+        {room.pause
+          ? `一時停止中です（${room.pause.name}さんが止めました）。再開までお待ちください。`
+          : '対戦中です。この対戦が終わると、次の対戦から参加できます。'}
+      </p>
       <OpponentColumn
         ids={ids}
         cols={best.cols}

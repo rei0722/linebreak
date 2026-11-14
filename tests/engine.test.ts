@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { Match } from '../server/match';
 import { Game, Input } from '../shared/engine/game';
+import { DEFAULT_SETTINGS } from '../shared/protocol';
 import { BATTLE_RULES, DEFAULT_HANDLING, SOLO_RULES, BOARD_W, BOARD_H, HIDDEN_H } from '../shared/engine/rules';
 import { SHAPES } from '../shared/engine/pieces';
 
@@ -340,5 +342,37 @@ describe('determinism', () => {
       g.advanceTo(4000);
     }
     expect(b.hash()).toBe(a.hash());
+  });
+});
+
+describe('match pause', () => {
+  test('a pause has no time limit and only the pauser can resume it', () => {
+    const host = { send: () => {}, broadcast: () => {}, ended: () => {}, roomChanged: () => {} };
+    const t0 = 1_000_000;
+    const m = new Match(
+      1,
+      [
+        { id: 'a', name: 'A', handling: DEFAULT_HANDLING },
+        { id: 'b', name: 'B', handling: DEFAULT_HANDLING },
+      ],
+      { ...DEFAULT_SETTINGS },
+      t0 - 10_000,
+      host,
+      42,
+    );
+    m.requestPause('a', t0);
+    expect(m.pauseInfo()?.by).toBe('a');
+    const ticks = [...m.players.values()].map((p) => p.game.tick);
+    m.update(t0 + 30 * 60_000); // 30 minutes later: still frozen, no auto-resume
+    expect(m.pauseInfo()).not.toBeNull();
+    expect(m.pauseInfo()?.resumeAt).toBeNull();
+    expect([...m.players.values()].map((p) => p.game.tick)).toEqual(ticks);
+    m.requestResume('b', t0 + 30 * 60_000); // not the pauser: ignored
+    expect(m.pauseInfo()?.resumeAt).toBeNull();
+    m.requestResume('a', t0 + 30 * 60_000);
+    const resumeAt = m.pauseInfo()?.resumeAt;
+    expect(resumeAt).toBe(t0 + 30 * 60_000 + 3_000);
+    m.update(resumeAt!);
+    expect(m.pauseInfo()).toBeNull();
   });
 });

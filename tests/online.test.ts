@@ -68,6 +68,7 @@ class Bot {
     if (m.t === 'welcome' && m.room.match && m.room.match.participants.some((p) => p.id === this.you)) {
       this.startMatch(m.room.match);
     }
+    if (this.room) this.runner?.syncPause(this.room.pause);
   }
 
   startMatch(info: NonNullable<RoomView['match']>) {
@@ -358,4 +359,43 @@ describe('matches', () => {
     expect(bots[0].room!.players.every((p) => p.connected)).toBe(true);
     bots.forEach((x) => x.close());
   }, 20000);
+
+  test('pause freezes every player, and only the pauser can resume (after a countdown)', async () => {
+    const { bots, id } = await makeRoom(2, 100000);
+    await startMatch(bots);
+    await waitFor(() => bots.every((b) => b.runner!.started), 6000);
+    await sleep(500);
+    const match = () => app.manager.rooms.get(id)!.match!;
+    const serverTicks = () => [...match().players.values()].map((p) => p.game.tick);
+
+    // bot2 pauses: the whole match freezes for everyone
+    bots[1].conn.send({ t: 'pause' });
+    await waitFor(() => bots.every((b) => b.room!.pause !== null));
+    expect(bots[0].room!.pause!.by).toBe(bots[1].you);
+    expect(bots[0].room!.pause!.name).toBe('bot2');
+    await sleep(300); // let any in-flight batches settle
+    const frozenClients = bots.map((b) => b.runner!.game.tick);
+    const frozenServer = serverTicks();
+    await sleep(1000);
+    expect(bots.map((b) => b.runner!.game.tick)).toEqual(frozenClients);
+    expect(serverTicks()).toEqual(frozenServer);
+    expect(bots.every((b) => b.runner!.isPaused())).toBe(true);
+
+    // someone else cannot resume
+    bots[0].conn.send({ t: 'resume' });
+    await sleep(300);
+    expect(bots[0].room!.pause).not.toBeNull();
+    expect(bots[0].room!.pause!.resumeAt).toBeNull();
+
+    // the pauser resumes: a countdown comes first, then play continues
+    bots[1].conn.send({ t: 'resume' });
+    await waitFor(() => bots[0].room!.pause?.resumeAt != null);
+    await sleep(300);
+    expect(serverTicks()).toEqual(frozenServer); // still frozen during the countdown
+    await waitFor(() => bots[0].room!.pause === null, 6000);
+    await sleep(700);
+    expect(Math.min(...serverTicks())).toBeGreaterThan(Math.min(...frozenServer));
+    expect(bots.every((b) => !b.runner!.isPaused())).toBe(true);
+    bots.forEach((b) => b.close());
+  }, 30000);
 });

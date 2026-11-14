@@ -80,6 +80,6 @@ export function onlineSource(runner: () => MatchRunner, conn: Connection): GameS
     frame: (now) => runner().update(now),
     input: (code) => runner().input(code),
     countdownMs: () => runner().info.startAt - conn.serverNow(),
-    paused: () => false,
+    paused: () => runner().isPaused(),
   };
 }

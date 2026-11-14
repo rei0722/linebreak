@@ -32,6 +32,8 @@ const schema = z.discriminatedUnion('t', [
       .partial(),
   }),
   z.object({ t: z.literal('start') }),
+  z.object({ t: z.literal('pause') }),
+  z.object({ t: z.literal('resume') }),
   z.object({ t: z.literal('kick'), id: z.string().max(32) }),
   z.object({ t: z.literal('ping'), c: z.number() }),
   z.object({
