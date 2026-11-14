@@ -17,7 +17,11 @@ export interface Prefs {
 }
 
 const KEY = 'linebreak.prefs';
-const DEFAULTS: Prefs = { name: '', sound: true, handling: DEFAULT_HANDLING, design: 'classic', fx: 'high' };
+/** Bumped when the display defaults change. Display choices saved under an older
+    version were mostly the old default written alongside a name or sound change,
+    not a choice, so they are replaced by the new default once. */
+const VERSION = 2;
+const DEFAULTS: Prefs = { name: '', sound: true, handling: DEFAULT_HANDLING, design: 'neon', fx: 'high' };
 
 function read(): Prefs {
   try {
@@ -26,8 +30,8 @@ function read(): Prefs {
       name: typeof raw.name === 'string' ? raw.name.slice(0, 16) : '',
       sound: raw.sound !== false,
       handling: clampHandling(raw.handling),
-      design: raw.design === 'neon' ? 'neon' : 'classic',
-      fx: raw.fx === 'low' || raw.fx === 'medium' ? raw.fx : 'high',
+      design: raw.v === VERSION && raw.design === 'classic' ? 'classic' : DEFAULTS.design,
+      fx: raw.v === VERSION && (raw.fx === 'low' || raw.fx === 'medium') ? raw.fx : DEFAULTS.fx,
     };
   } catch {
     return { ...DEFAULTS };
@@ -42,7 +46,7 @@ export const prefs = {
   set(patch: Partial<Prefs>) {
     current = { ...current, ...patch };
     try {
-      localStorage.setItem(KEY, JSON.stringify(current));
+      localStorage.setItem(KEY, JSON.stringify({ ...current, v: VERSION }));
     } catch {
       /* private mode: keep in memory */
     }

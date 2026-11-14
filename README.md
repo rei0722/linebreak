@@ -16,7 +16,7 @@ Create a room, send the invite URL, and your friends join by opening it.
 The top bar switches the look at any time, including mid-match. It changes drawing only: game state, the room and the connection are untouched, and the choice is saved in `localStorage`.
 
 - **CLASSIC** — the original look.
-- **NEON CYBER ARENA** — neon skin (`client/src/game/neon.ts`, `client/src/neon.css`) with tiered line-clear effects, combo counter and hi-score.
+- **NEON CYBER ARENA** — the default, at effects HIGH. Neon skin (`client/src/game/neon.ts`, `client/src/neon.css`) with tiered line-clear effects, combo counter and hi-score.
 - **Effects HIGH / MEDIUM / LOW** — particle and glow budget. The game also steps down by itself when frames run slow, and honours `prefers-reduced-motion`.
 
 Attack direction works in both designs: beams are drawn from the attacker's board to yours using their real on-screen positions, driven only by the server's `attack` events (`client/src/game/fx.ts`, `Arena` in `client/src/screens/Room.tsx`). Phones get on-screen controls below 760px width.
