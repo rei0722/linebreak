@@ -167,6 +167,18 @@ function wellLayer(px: number): HTMLCanvasElement {
   return c;
 }
 
+/**
+ * Build every sprite for this cell size up front. Baking a glow uses shadowBlur,
+ * which is slow; doing it here keeps that cost out of the first frames of play.
+ */
+export function warmNeon(px: number) {
+  wellLayer(px);
+  for (let c = 1; c <= 8; c++) {
+    neonTile(c, px);
+    if (c !== 8) halo(c, px);
+  }
+}
+
 // ------------------------------------------------------------------ stack cache
 
 interface StackCache {

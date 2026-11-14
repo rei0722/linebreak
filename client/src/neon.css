@@ -370,3 +370,17 @@
     animation: none;
   }
 }
+
+/* Glowing text that moves is rasterised once and then only transformed by the
+   compositor; without this the browser re-blurs the text-shadow every frame. */
+[data-design='neon'] .action,
+[data-design='neon'] .action-main,
+[data-design='neon'] .countdown,
+[data-design='neon'] .combo-box b {
+  will-change: transform, opacity;
+}
+
+/* keep the frame's large static glow on its own layer, apart from the board that redraws every frame */
+[data-design='neon'] .board-frame {
+  transform: translateZ(0);
+}

@@ -11,6 +11,7 @@ import { usePrefs } from '../ui';
 import { sfx } from './audio';
 import { fx as fxe, type Box } from './fx';
 import { KeyboardController } from './input';
+import { warmNeon } from './neon';
 import { TOP_ROWS, currentDesign, drawMainBoard, drawPiece, inDanger, newFx, palette, setupCanvas } from './render';
 
 export interface GameSource {
@@ -125,6 +126,13 @@ export function GameView({
     const nextH = Math.round(cell * 3) + (NEXT_COUNT - 1) * Math.round(small * 2.6);
     const next = setupCanvas(nextRef.current!, side, nextH);
     const fx = newFx();
+    // pay for sprite baking now, during the countdown, not on the first piece or first clear
+    const warm = () => {
+      if (currentDesign() !== 'neon') return;
+      warmNeon(Math.round(cell * board.dpr));
+      fxe.warm([...SPARK, '#ff3d7f', ...palette().slice(1)]);
+    };
+    warm();
     let raf = 0;
     let drawnHold = '';
     let drawnNext = '';
@@ -427,6 +435,7 @@ export function GameView({
         // skin switched mid-game: repaint the cached side panels, keep everything else
         lastDesign = d;
         drawnHold = drawnNext = '';
+        warm();
       }
       fx.quality = fxe.level;
       fx.reduced = fxe.reduced;

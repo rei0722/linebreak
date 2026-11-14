@@ -11,7 +11,9 @@ import { prefs, type FxQuality } from '../prefs';
 
 const LEVEL: Record<FxQuality, number> = { low: 0, medium: 1, high: 2 };
 const MAX_PARTICLES = 640;
-const PARTICLE_CAP = [90, 280, MAX_PARTICLES];
+const PARTICLE_CAP = [90, 260, 420];
+/** Overlay pixel budget per level. The overlay is uploaded to the GPU every effect frame, so its size is the main cost. */
+const PIXEL_BUDGET = [0.6e6, 0.9e6, 1.3e6];
 const MAX_RINGS = 10;
 const MAX_BEAMS = 6;
 
@@ -93,7 +95,7 @@ class FxEngine {
   // frame-time governor
   private gN = 0;
   private gSum = 0;
-  private good = 0;
+  private gSlow = 0;
   /** rolling average frame time in ms, for the perf readout */
   avgFrame = 16.7;
 
@@ -101,7 +103,6 @@ class FxEngine {
     prefs.subscribe((p) => {
       this.cap = LEVEL[p.fx];
       this.level = this.cap;
-      this.good = 0;
       this.resize();
     });
     if (typeof matchMedia === 'function') {
@@ -130,23 +131,23 @@ class FxEngine {
   noteFrame(dt: number) {
     if (dt <= 0 || dt > 250) return; // tab switch, breakpoint
     this.gSum += dt;
-    if (++this.gN < 120) return;
+    // a "hitch" is a frame that missed at least one refresh on a 60Hz display
+    if (dt > 25) this.gSlow++;
+    if (++this.gN < 90) return;
     const avg = this.gSum / this.gN;
+    const hitchy = this.gSlow > this.gN * 0.06;
     this.avgFrame = avg;
     this.gN = 0;
     this.gSum = 0;
+    this.gSlow = 0;
     if (!this.auto) return;
-    if (avg > 21 && this.level > 0) {
+    // Step down on a slow average OR on repeated hitches (an average hides those).
+    // There is no automatic step back up: climbing would bring the stutter back.
+    // Picking a level in the top bar resets this.
+    if ((avg > 19 || hitchy) && this.level > 0) {
       this.level--;
-      this.good = 0;
       this.resize();
-    } else if (avg < 17.6) {
-      if (++this.good >= 5 && this.level < this.cap) {
-        this.level++;
-        this.good = 0;
-        this.resize();
-      }
-    } else this.good = 0;
+    }
   }
 
   private ensure(): CanvasRenderingContext2D | null {
@@ -156,7 +157,9 @@ class FxEngine {
     c.setAttribute('aria-hidden', 'true');
     document.body.appendChild(c);
     this.canvas = c;
-    this.ctx = c.getContext('2d');
+    // desynchronized: let the browser present this layer without waiting on the page's own paint
+    this.ctx = c.getContext('2d', { alpha: true, desynchronized: true });
+    c.style.display = 'none';
     this.resize();
     return this.ctx;
   }
@@ -164,10 +167,11 @@ class FxEngine {
   private resize() {
     const c = this.canvas;
     if (!c) return;
-    // the overlay is fill-rate bound: full-res only on HIGH
-    this.scale = this.level >= 2 ? Math.min(1.25, window.devicePixelRatio || 1) : 1;
     this.w = window.innerWidth;
     this.h = window.innerHeight;
+    // Never more pixels than the budget, whatever the window or display size:
+    // sparks are soft, so a slightly lower-resolution overlay is not visible.
+    this.scale = Math.min(1, Math.sqrt(PIXEL_BUDGET[this.level] / Math.max(1, this.w * this.h)));
     c.width = Math.round(this.w * this.scale);
     c.height = Math.round(this.h * this.scale);
   }
@@ -195,6 +199,7 @@ class FxEngine {
     if (this.running || document.hidden) return;
     if (!this.ensure()) return;
     this.running = true;
+    this.canvas!.style.display = '';
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -286,6 +291,12 @@ class FxEngine {
     this.kick();
   }
 
+  /** Create the overlay and the glow sprites for these colours ahead of first use. */
+  warm(colors: string[]) {
+    if (!this.ensure()) return;
+    for (const c of colors) this.colorIndex(c);
+  }
+
   clearAll() {
     this.n = 0;
     this.rings.length = 0;
@@ -295,6 +306,7 @@ class FxEngine {
     if (this.running) {
       cancelAnimationFrame(this.raf);
       this.running = false;
+      if (this.canvas) this.canvas.style.display = 'none';
     }
     this.ctx?.clearRect(0, 0, this.canvas!.width, this.canvas!.height);
   }
@@ -453,6 +465,8 @@ class FxEngine {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, this.canvas!.width, this.canvas!.height);
       this.running = false;
+      // no full-screen layer for the compositor while nothing is playing
+      this.canvas!.style.display = 'none';
     }
   }
 }
