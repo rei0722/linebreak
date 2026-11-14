@@ -5,8 +5,27 @@ import { MatchRunner } from '../client/src/net/matchRunner';
 import { Input } from '../shared/engine/game';
 import { DEFAULT_HANDLING } from '../shared/engine/rules';
 import { PROTOCOL_VERSION, type ServerMsg } from '../shared/protocol';
+import { bestMove } from '../client/src/game/ai';
 
-const [room, countArg, url = 'ws://localhost:8787/ws'] = process.argv.slice(2);
+/** Place one piece with ordinary inputs only (rotate, tap left/right, hard drop). */
+function placeSmart(runner: MatchRunner) {
+  const m = bestMove(runner.game);
+  if (!m) return;
+  for (let i = 0; i < m.r; i++) runner.input(Input.RotateCW);
+  for (let i = 0; i < 12; i++) {
+    const x = runner.game.cur?.x;
+    if (x === undefined || x === m.x) break;
+    if (x > m.x) (runner.input(Input.LeftDown), runner.input(Input.LeftUp));
+    else (runner.input(Input.RightDown), runner.input(Input.RightUp));
+    if (runner.game.cur?.x === x) break; // blocked
+  }
+  runner.input(Input.HardDrop);
+}
+
+// Add "smart" as a 4th argument for bots that stack properly (and so send real attacks):
+//   bun tests/bots.ts <ROOMID> 3 ws://localhost:8787/ws smart
+const [room, countArg, url = 'ws://localhost:8787/ws', modeArg] = process.argv.slice(2);
+const smart = modeArg === 'smart';
 if (!room) {
   console.error('usage: bun tests/bots.ts <ROOMID> [count] [ws-url]');
   process.exit(1);
@@ -34,6 +53,10 @@ for (let i = 0; i < Number(countArg ?? 7); i++) {
   setInterval(() => {
     if (!runner) return;
     runner.update();
+    if (smart) {
+      if (runner.started && !runner.game.over && Math.random() < 0.035) placeSmart(runner);
+      return;
+    }
     if (runner.started && Math.random() < 0.012 + i * 0.002) {
       const k = Math.floor(Math.random() * 3);
       if (k === 0) runner.input(Input.RotateCW);

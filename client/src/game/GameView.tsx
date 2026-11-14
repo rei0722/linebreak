@@ -177,7 +177,10 @@ export function GameView({
     kb.enabled = live.current.inputEnabled;
     kbRef.current = kb;
     // dev-only handle for browser tests and the perf readout (stripped from production builds)
-    if (import.meta.env.DEV) (window as never as { __lb: unknown }).__lb = { game: () => live.current.source.game(), fx: fxe };
+    if (import.meta.env.DEV) {
+      const w = window as never as { __lb?: object };
+      w.__lb = { ...w.__lb, game: () => live.current.source.game(), fx: fxe };
+    }
     onController?.(kb);
 
     const showAction = (main: string, sub: string[], tone: 'normal' | 'big' | 'quad' = 'normal') => {
@@ -399,6 +402,11 @@ export function GameView({
     };
 
     const frame = () => {
+      // React detaches refs before this effect's cleanup runs; skip the frame in that gap
+      if (!comboRef.current || !wrapRef.current || !statRefs.score.current) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const now = performance.now();
       const src = live.current.source;
       src.frame(Date.now());

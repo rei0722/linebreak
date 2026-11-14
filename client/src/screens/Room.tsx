@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { VISIBLE_H } from '../../../shared/engine/rules';
 import type { BoardSnap, PlayerView, ResultRow, RoomView } from '../../../shared/protocol';
+import { bestMove } from '../game/ai';
 import { sfx } from '../game/audio';
 import { GameView } from '../game/GameView';
 import { edgePoint, fx, type Box } from '../game/fx';
@@ -88,16 +89,31 @@ function JoinPrompt({ roomId, onDone }: { roomId: string; onDone: () => void }) 
 }
 
 function RoomConnected({ initialId }: { initialId: string | null }) {
-  const session = useMemo(
-    () =>
-      new RoomSession(initialId, (rid) => {
-        if (!initialId) createdHere.add(rid);
-        navigate(`/room/${rid}`, true);
-      }),
+  // The session owns a socket, so it is created and disposed by the same effect.
+  // (Creating it during render left React StrictMode with a disposed session in dev.)
+  const [session, setSession] = useState<RoomSession | null>(null);
+  useEffect(() => {
+    const created = new RoomSession(initialId, (rid) => {
+      if (!initialId) createdHere.add(rid);
+      navigate(`/room/${rid}`, true);
+    });
+    setSession(created);
+    return () => created.dispose();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  useEffect(() => () => session.dispose(), [session]);
+  }, []);
+  if (!session)
+    return (
+      <div className="screen">
+        <TopBar />
+        <main className="screen-body">
+          <Connecting status="connecting" onRetry={() => {}} />
+        </main>
+      </div>
+    );
+  return <RoomScreen session={session} />;
+}
+
+function RoomScreen({ session }: { session: RoomSession }) {
   const s = useSession(session);
   const room = s.room;
 
@@ -656,6 +672,10 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
   // so it follows any player count, layout or window size.
   useEffect(() => {
     const you = s.you;
+    if (import.meta.env.DEV) {
+      const w = window as never as { __lb?: object };
+      w.__lb = { ...w.__lb, session, bestMove };
+    }
     const names = new Map((session.state.runner?.info.participants ?? []).map((p) => [p.id, p.name]));
     const chips = new Map<string, { el: HTMLDivElement; lines: number }>();
     const boxOf = (el: Element): Box => {

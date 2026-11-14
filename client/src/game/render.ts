@@ -113,6 +113,36 @@ export function newFx(): BoardFx {
   };
 }
 
+const stackCache = new WeakMap<HTMLCanvasElement, { key: string; layer: HTMLCanvasElement }>();
+
+/** The settled stack as one image (same pixels as drawing each tile every frame). */
+function classicStack(c: Canvas2D, game: Game, px: number, dim: boolean): HTMLCanvasElement {
+  const first = (HIDDEN_H - TOP_ROWS) * BOARD_W;
+  const last = (HIDDEN_H + VISIBLE_H) * BOARD_W;
+  const b = game.board;
+  let h = 0;
+  for (let i = first; i < last; i++) h = (Math.imul(h, 31) + b[i] + 1) | 0;
+  const key = `${h}:${px}:${dim ? 1 : 0}`;
+  let sc = stackCache.get(c.canvas);
+  if (!sc || sc.layer.width !== BOARD_W * px) {
+    const layer = document.createElement('canvas');
+    layer.width = BOARD_W * px;
+    layer.height = (VISIBLE_H + TOP_ROWS) * px;
+    sc = { key: '', layer };
+    stackCache.set(c.canvas, sc);
+  }
+  if (sc.key !== key) {
+    sc.key = key;
+    const g = sc.layer.getContext('2d')!;
+    g.clearRect(0, 0, sc.layer.width, sc.layer.height);
+    for (let i = first; i < last; i++) {
+      const v = b[i];
+      if (v) g.drawImage(tile(dim ? 8 : v, px), ((i - first) % BOARD_W) * px, (((i - first) / BOARD_W) | 0) * px);
+    }
+  }
+  return sc.layer;
+}
+
 /** Draws the main board including ghost and active piece. Cell size in css px. */
 export function drawMainBoard(c: Canvas2D, game: Game, cell: number, fx: BoardFx, now: number, dim = false) {
   if (design === 'neon') return drawNeonBoard(c, game, cell, fx, now, dim);
@@ -138,13 +168,8 @@ export function drawMainBoard(c: Canvas2D, game: Game, cell: number, fx: BoardFx
   const rowY = (boardY: number) => top + (boardY - HIDDEN_H) * px;
   const firstRow = HIDDEN_H - TOP_ROWS;
 
-  // settled cells
-  for (let y = firstRow; y < HIDDEN_H + VISIBLE_H; y++) {
-    for (let x = 0; x < BOARD_W; x++) {
-      const v = game.board[y * BOARD_W + x];
-      if (v) ctx.drawImage(tile(dim ? 8 : v, px), x * px, rowY(y));
-    }
-  }
+  // settled cells: painted into a cached layer that is rebuilt only when the stack changes
+  ctx.drawImage(classicStack(c, game, px, dim), 0, 0);
 
   // hard drop trail
   if (fx.trail && now - fx.trail.at < 140) {

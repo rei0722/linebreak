@@ -165,7 +165,7 @@ class FxEngine {
     const c = this.canvas;
     if (!c) return;
     // the overlay is fill-rate bound: full-res only on HIGH
-    this.scale = this.level >= 2 ? Math.min(1.5, window.devicePixelRatio || 1) : 1;
+    this.scale = this.level >= 2 ? Math.min(1.25, window.devicePixelRatio || 1) : 1;
     this.w = window.innerWidth;
     this.h = window.innerHeight;
     c.width = Math.round(this.w * this.scale);
@@ -307,8 +307,19 @@ class FxEngine {
   // ---------------------------------------------------------------- frame
 
   private frame = (now: number) => {
+    try {
+      this.draw(now);
+    } catch (err) {
+      // an effect must never take the loop down with it: drop everything and go idle
+      this.running = false;
+      this.clearAll();
+      console.error('[fx] frame failed', err);
+    }
+  };
+
+  private draw(now: number) {
     const ctx = this.ctx!;
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
     this.last = now;
     const s = this.scale;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -319,7 +330,8 @@ class FxEngine {
     // beams
     for (let i = this.beams.length - 1; i >= 0; i--) {
       const b = this.beams[i];
-      const t = (now - b.at) / b.dur;
+      // rAF's timestamp is the frame start, which can be earlier than a spawn made this frame
+      const t = Math.max(0, (now - b.at) / b.dur);
       if (t >= 1) {
         this.beams.splice(i, 1);
         b.onArrive?.();
@@ -370,13 +382,13 @@ class FxEngine {
     // rings
     for (let i = this.rings.length - 1; i >= 0; i--) {
       const r = this.rings[i];
-      const t = (now - r.at) / r.dur;
+      const t = Math.max(0, (now - r.at) / r.dur);
       if (t >= 1) {
         this.rings.splice(i, 1);
         continue;
       }
       const e = 1 - (1 - t) ** 3;
-      const rad = r.r0 + (r.r1 - r.r0) * e;
+      const rad = Math.max(0, r.r0 + (r.r1 - r.r0) * e);
       ctx.globalAlpha = (1 - t) ** 1.5;
       ctx.strokeStyle = r.color;
       ctx.lineWidth = r.width * (1 - t * 0.6);
@@ -424,7 +436,8 @@ class FxEngine {
       const sz = this.size[i] * (0.4 + 0.6 * k);
       const ci = this.col[i];
       ctx.globalAlpha = k;
-      if (glow) ctx.drawImage(this.glows[ci], x - sz * 2.2, y - sz * 2.2, sz * 4.4, sz * 4.4);
+      // halo on every other spark: half the scaled blits, visually the same density
+      if (glow && (i & 1) === 0) ctx.drawImage(this.glows[ci], x - sz * 2.4, y - sz * 2.4, sz * 4.8, sz * 4.8);
       if (ci !== lastCol) {
         ctx.fillStyle = this.colors[ci];
         lastCol = ci;
@@ -441,7 +454,7 @@ class FxEngine {
       ctx.clearRect(0, 0, this.canvas!.width, this.canvas!.height);
       this.running = false;
     }
-  };
+  }
 }
 
 export const fx = new FxEngine();

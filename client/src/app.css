@@ -1084,6 +1084,26 @@
   .incoming {
     min-height: 0;
   }
+  /* the bar must never be wider than the screen: phones widen the whole page to fit it */
+  .topbar {
+    gap: var(--s2);
+    padding: 0 var(--s2);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .topbar .wordmark {
+    font-size: 0;
+    gap: 0;
+  }
+  .topbar .conn {
+    font-size: 0;
+    gap: 0;
+  }
+  .topbar .btn-sm {
+    padding: 0 var(--s2);
+    font-size: 0;
+    gap: 0;
+  }
   .display-controls {
     gap: 4px;
     margin-right: 0;
