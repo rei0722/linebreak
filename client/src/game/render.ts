@@ -4,6 +4,17 @@
 import { SHAPES } from '../../../shared/engine/pieces';
 import { BOARD_W, HIDDEN_H, VISIBLE_H } from '../../../shared/engine/rules';
 import type { Game } from '../../../shared/engine/game';
+import type { Design } from '../prefs';
+import { NEON, NEON_WELL, drawNeonBoard, neonTile } from './neon';
+
+/** Active skin. Set from prefs (main.tsx); the draw functions below branch on it. */
+let design: Design = 'classic';
+export function setDesign(d: Design) {
+  design = d;
+}
+export const currentDesign = () => design;
+/** Piece colours of the active skin (index 1..7, 8 = garbage). */
+export const palette = () => (design === 'neon' ? NEON : COLORS);
 
 export const COLORS = ['', '#3fd0e0', '#f5cd3d', '#b56cf0', '#63d86b', '#f2566a', '#4c7df5', '#f59342', '#5d5677'];
 export const WELL = '#110e1e';
@@ -22,6 +33,7 @@ const tileCache = new Map<string, HTMLCanvasElement>();
 
 /** A bevelled tile: flat face, light top edge, darker bottom edge. Size in device px. */
 export function tile(color: number, size: number, flat = false): HTMLCanvasElement {
+  if (design === 'neon') return neonTile(color, size, flat);
   const key = `${color}:${size}:${flat ? 1 : 0}`;
   let c = tileCache.get(key);
   if (c) return c;
@@ -75,14 +87,35 @@ export interface BoardFx {
   trail: { x0: number; x1: number; yTop: number; yBot: number; color: number; at: number } | null;
   shakeAt: number;
   danger: boolean;
+  // --- used by the neon skin only
+  /** tiered line-clear effect; power grows with combo */
+  clear: { rows: number[]; lines: number; at: number; power: number } | null;
+  /** cells (board coords) of the piece that just locked */
+  lock: { cells: [number, number][]; at: number } | null;
+  /** garbage rows that just rose */
+  garbage: { lines: number; at: number } | null;
+  /** 0 low, 1 medium, 2 high */
+  quality: number;
+  reduced: boolean;
 }
 
 export function newFx(): BoardFx {
-  return { flash: null, trail: null, shakeAt: 0, danger: false };
+  return {
+    flash: null,
+    trail: null,
+    shakeAt: 0,
+    danger: false,
+    clear: null,
+    lock: null,
+    garbage: null,
+    quality: 2,
+    reduced: false,
+  };
 }
 
 /** Draws the main board including ghost and active piece. Cell size in css px. */
 export function drawMainBoard(c: Canvas2D, game: Game, cell: number, fx: BoardFx, now: number, dim = false) {
+  if (design === 'neon') return drawNeonBoard(c, game, cell, fx, now, dim);
   const { ctx, dpr } = c;
   const px = Math.round(cell * dpr);
   const W = BOARD_W * px;
@@ -222,7 +255,7 @@ export function drawMini(
   const W = BOARD_W * px;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, c.canvas.width, c.canvas.height);
-  ctx.fillStyle = WELL;
+  ctx.fillStyle = design === 'neon' ? NEON_WELL : WELL;
   ctx.fillRect(0, 0, W, VISIBLE_H * px);
   const off = 2; // buffer rows in snapshot
   for (let y = off; y < VISIBLE_H + off; y++) {
@@ -238,7 +271,7 @@ export function drawMini(
       if (yy >= 0) ctx.drawImage(tile(p, px, true), (x + cx) * px, yy * px);
     }
   }
-  ctx.strokeStyle = 'rgba(167,159,192,0.22)';
+  ctx.strokeStyle = design === 'neon' ? 'rgba(46,230,255,0.4)' : 'rgba(167,159,192,0.22)';
   ctx.lineWidth = 1;
   ctx.strokeRect(0.5, 0.5, W - 1, VISIBLE_H * px - 1);
 }

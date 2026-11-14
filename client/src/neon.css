@@ -1,0 +1,372 @@
+/* NEON CYBER ARENA — everything here is scoped to [data-design='neon'], so the
+   classic design is untouched when this skin is off.
+
+   Glow budget: every shadow below is static. Nothing animates box-shadow or
+   filter continuously; animated glow lives on the canvas (see game/neon.ts,
+   game/fx.ts) and only while an effect is playing. */
+
+:root[data-design='neon'] {
+  --stage: #05070f;
+  --stage-deep: #04060d;
+  --panel: #0a1024;
+  --panel-raised: #101a38;
+  --well: #04060f;
+  --line: #1f3f7c;
+  --line-soft: #14264e;
+  --text: #e4f7ff;
+  --text-dim: #8fb2da;
+  --text-faint: #58719e;
+  --you: #2ee6ff;
+  --you-ink: #00222b;
+  --danger: #ff3d7f;
+  --ok: #3dff7a;
+
+  --p-i: #2ee6ff;
+  --p-o: #ffe14a;
+  --p-t: #b65cff;
+  --p-s: #3dff7a;
+  --p-z: #ff3d7f;
+  --p-j: #4d7dff;
+  --p-l: #ff9a2e;
+
+  --neon-cyan: #2ee6ff;
+  --neon-magenta: #ff3df0;
+  --neon-violet: #9d5cff;
+  --font-num: 'Oxanium', 'Archivo', 'Zen Kaku Gothic New', system-ui, sans-serif;
+  --font-sf: 'Oxanium', 'Zen Kaku Gothic New', system-ui, sans-serif;
+}
+
+[data-design='neon'] body {
+  background:
+    radial-gradient(900px 520px at 50% -8%, rgba(46, 110, 255, 0.2), transparent 70%),
+    radial-gradient(700px 500px at 100% 100%, rgba(255, 61, 240, 0.07), transparent 70%),
+    linear-gradient(rgba(46, 230, 255, 0.035) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(90deg, rgba(46, 230, 255, 0.035) 1px, transparent 1px) 0 0 / 44px 44px,
+    var(--stage);
+}
+
+[data-design='neon'] .topbar {
+  border-bottom-color: rgba(46, 230, 255, 0.32);
+  background: rgba(5, 7, 15, 0.7);
+}
+[data-design='neon'] .wordmark,
+[data-design='neon'] .seg-sm button {
+  font-family: var(--font-sf);
+  letter-spacing: 0.08em;
+}
+[data-design='neon'] .btn:hover:not(:disabled) {
+  background: #16254e;
+  border-color: #2f5fb4;
+}
+[data-design='neon'] .btn-primary,
+[data-design='neon'] .btn-primary:hover:not(:disabled) {
+  background: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  color: var(--you-ink);
+  box-shadow: 0 0 16px rgba(46, 230, 255, 0.35);
+}
+[data-design='neon'] .seg button[aria-pressed='true'] {
+  color: var(--neon-cyan);
+  background: rgba(46, 230, 255, 0.1);
+}
+[data-design='neon'] .dialog,
+[data-design='neon'] .results,
+[data-design='neon'] .board-panel {
+  background: rgba(8, 13, 32, 0.96);
+  border-color: rgba(46, 230, 255, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(255, 61, 240, 0.18),
+    0 0 32px rgba(46, 230, 255, 0.16),
+    0 18px 48px rgba(0, 0, 0, 0.6);
+}
+[data-design='neon'] .room-code,
+[data-design='neon'] .home-title,
+[data-design='neon'] .results-winner {
+  font-family: var(--font-sf);
+  text-shadow: 0 0 22px rgba(46, 230, 255, 0.45);
+}
+
+/* ------------------------------------------------------------ play area */
+
+[data-design='neon'] .play {
+  gap: calc(var(--s4) + 12px);
+}
+[data-design='neon'] .play-side {
+  gap: var(--s4);
+  align-items: stretch;
+}
+[data-design='neon'] .play-well {
+  gap: 16px;
+}
+
+[data-design='neon'] .slot-label,
+[data-design='neon'] .play-left .slot-label {
+  text-align: center;
+  font-family: var(--font-sf);
+  font-size: clamp(12px, calc(var(--cell) * 0.46), 16px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #a8f1ff;
+  text-shadow: 0 0 10px rgba(46, 230, 255, 0.55);
+}
+[data-design='neon'] .slot canvas {
+  background: linear-gradient(160deg, rgba(20, 40, 86, 0.75), rgba(6, 10, 24, 0.9));
+  border: 1px solid rgba(46, 230, 255, 0.55);
+  border-radius: 12px;
+  box-shadow:
+    0 0 14px rgba(46, 230, 255, 0.2),
+    inset 0 0 20px rgba(46, 230, 255, 0.08);
+}
+
+/* stat plates: equal size, chamfered like the reference HUD */
+[data-design='neon'] .stats {
+  gap: var(--s2);
+  text-align: center;
+}
+[data-design='neon'] .stats > div {
+  padding: 5px 6px 4px;
+  background: linear-gradient(180deg, rgba(16, 34, 76, 0.7), rgba(6, 10, 24, 0.85));
+  border: 1px solid rgba(46, 230, 255, 0.42);
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+[data-design='neon'] .stats dt {
+  font-family: var(--font-sf);
+  font-size: clamp(10px, calc(var(--cell) * 0.36), 13px);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: #8fdcf2;
+}
+[data-design='neon'] .stats dd,
+[data-design='neon'] .stats .stat-score {
+  font-size: clamp(15px, calc(var(--cell) * 0.62), 24px);
+  font-weight: 700;
+  font-stretch: 100%;
+  color: #e9fbff;
+  text-shadow: 0 0 10px rgba(46, 230, 255, 0.6);
+}
+/* left: LEVEL, LINES, TIME — right: SCORE, HI-SCORE */
+[data-design='neon'] .stat-score-left {
+  display: none;
+}
+[data-design='neon'] .stat-level {
+  order: 1;
+}
+[data-design='neon'] .stat-lines {
+  order: 2;
+}
+[data-design='neon'] .stat-time {
+  order: 3;
+}
+[data-design='neon'] .stats-right {
+  display: flex;
+}
+[data-design='neon'] .stats-right .stat-score {
+  font-size: clamp(14px, calc(var(--cell) * 0.6), 23px);
+}
+
+[data-design='neon'] .combo-box {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sf);
+  letter-spacing: 0.14em;
+  font-size: clamp(10px, calc(var(--cell) * 0.36), 13px);
+  color: #ff9df7;
+  visibility: hidden;
+}
+[data-design='neon'] .combo-box[data-on='true'] {
+  visibility: visible;
+}
+[data-design='neon'] .combo-box b {
+  font-size: clamp(22px, calc(var(--cell) * 1.05), 40px);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 8px var(--neon-magenta),
+    0 0 22px rgba(255, 61, 240, 0.7);
+}
+[data-design='neon'] .combo-box[data-heat='1'] b {
+  font-size: clamp(24px, calc(var(--cell) * 1.2), 46px);
+}
+[data-design='neon'] .combo-box[data-heat='2'] b,
+[data-design='neon'] .combo-box[data-heat='3'] b {
+  font-size: clamp(26px, calc(var(--cell) * 1.35), 52px);
+  color: #fff6c9;
+}
+[data-design='neon'] .combo-box.bump b {
+  animation: combo-bump 260ms var(--ease-out);
+}
+@keyframes combo-bump {
+  0% {
+    transform: scale(1.7);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* the frame: cyan tube outside, magenta line inside. Static glow. */
+[data-design='neon'] .board-frame {
+  display: block;
+  position: absolute;
+  left: -9px;
+  right: -9px;
+  bottom: -9px;
+  top: calc(var(--cell) * 2 - 9px);
+  border: 2px solid var(--neon-cyan);
+  border-radius: 14px;
+  box-shadow:
+    0 0 18px rgba(46, 230, 255, 0.55),
+    0 0 46px rgba(46, 150, 255, 0.22),
+    inset 0 0 10px rgba(46, 230, 255, 0.35);
+  pointer-events: none;
+}
+[data-design='neon'] .board-frame::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid var(--neon-magenta);
+  border-radius: 9px;
+  box-shadow: 0 0 10px rgba(255, 61, 240, 0.55);
+}
+[data-design='neon'] .board-wrap[data-danger='true'] .board-frame {
+  border-color: var(--danger);
+  box-shadow:
+    0 0 20px rgba(255, 61, 127, 0.7),
+    inset 0 0 12px rgba(255, 61, 127, 0.4);
+}
+[data-design='neon'] .gmeter {
+  width: 7px;
+  background: rgba(255, 61, 127, 0.12);
+  box-shadow: 0 0 0 1px rgba(255, 61, 127, 0.35);
+}
+
+[data-design='neon'] .countdown,
+[data-design='neon'] .action,
+[data-design='neon'] .ko-place,
+[data-design='neon'] .mini-ko {
+  font-family: var(--font-sf);
+}
+[data-design='neon'] .countdown {
+  color: #fff;
+  text-shadow:
+    0 0 14px var(--neon-cyan),
+    0 0 44px rgba(46, 230, 255, 0.6);
+}
+[data-design='neon'] .action-main {
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #eaffff;
+  text-shadow:
+    0 0 10px var(--neon-cyan),
+    0 2px 14px rgba(0, 0, 0, 0.9);
+}
+[data-design='neon'] .action[data-tone='big'] .action-main {
+  color: #fff;
+  text-shadow:
+    0 0 12px var(--neon-magenta),
+    0 0 30px rgba(255, 61, 240, 0.6);
+}
+[data-design='neon'] .action-sub {
+  letter-spacing: 0.14em;
+  font-weight: 600;
+  color: #a8f1ff;
+}
+/* four lines: the one callout that gets its own entrance */
+[data-design='neon'] .action[data-tone='quad'] .action-main {
+  font-size: calc(var(--cell) * 1.18);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: #fff;
+  text-shadow:
+    0 0 10px #fff,
+    0 0 24px var(--neon-magenta),
+    0 0 54px var(--neon-cyan);
+}
+[data-design='neon'] .action[data-tone='quad'].show .action-main {
+  animation: quad-in 620ms cubic-bezier(0.2, 1.4, 0.3, 1) both;
+}
+@keyframes quad-in {
+  0% {
+    transform: scale(0.3) skewX(-18deg);
+    opacity: 0;
+  }
+  45% {
+    transform: scale(1.22) skewX(-6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) skewX(-6deg);
+  }
+}
+
+/* ------------------------------------------------------------ opponents */
+
+[data-design='neon'] .mini-name,
+[data-design='neon'] .mini-score,
+[data-design='neon'] .mini-lines {
+  font-family: var(--font-sf);
+  letter-spacing: 0.04em;
+}
+[data-design='neon'] .mini-board canvas {
+  box-shadow:
+    0 0 0 1px rgba(46, 230, 255, 0.3),
+    0 0 12px rgba(46, 230, 255, 0.12);
+}
+[data-design='neon'] .incoming:not(:empty)::before {
+  content: 'INCOMING';
+  font-family: var(--font-sf);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--danger);
+  text-shadow: 0 0 8px rgba(255, 61, 127, 0.7);
+}
+[data-design='neon'] .incoming-chip {
+  background: linear-gradient(90deg, rgba(255, 61, 127, 0.16), rgba(6, 10, 24, 0.7));
+  font-family: var(--font-sf);
+}
+
+[data-design='neon'] .player,
+[data-design='neon'] .rules {
+  border-color: var(--line-soft);
+}
+[data-design='neon'] .player[data-me='true'] {
+  box-shadow: inset 3px 0 0 var(--neon-cyan);
+}
+
+@media (max-width: 759px) {
+  [data-design='neon'] .play {
+    gap: var(--s4);
+  }
+  [data-design='neon'] .play-well {
+    gap: 9px;
+  }
+  [data-design='neon'] .board-frame {
+    left: -5px;
+    right: -5px;
+    bottom: -5px;
+    top: calc(var(--cell) * 2 - 5px);
+    border-radius: 9px;
+  }
+  [data-design='neon'] .board-frame::before {
+    display: none;
+  }
+  [data-design='neon'] .stats > div {
+    padding: 3px 2px;
+  }
+  [data-design='neon'] .tp {
+    border-color: rgba(46, 230, 255, 0.45);
+    font-family: var(--font-sf);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-design='neon'] .action[data-tone='quad'].show .action-main,
+  [data-design='neon'] .combo-box.bump b {
+    animation: none;
+  }
+}

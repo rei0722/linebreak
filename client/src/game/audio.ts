@@ -91,6 +91,22 @@ export const sfx = {
       noise(0.18, 0.2, 4000);
     }
   },
+  /** Four lines at once: a rising arpeggio over a low hit. */
+  quad() {
+    [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, 'triangle', 0.5, 0, i * 0.045));
+    tone(98, 0.34, 'sine', 1, -40);
+    tone(1568, 0.3, 'sawtooth', 0.12, 600, 0.2);
+    noise(0.3, 0.3, 3000);
+  },
+  /** Combo tick: pitch climbs with the combo count. */
+  combo(n: number) {
+    tone(440 * 2 ** (Math.min(12, n) / 12), 0.09, 'square', 0.22, 0, 0.06);
+  },
+  /** An attack is on its way to you. */
+  incoming(lines: number) {
+    tone(lines >= 4 ? 196 : 262, 0.1, 'sawtooth', 0.28, 120);
+    if (lines >= 4) tone(196, 0.1, 'sawtooth', 0.28, 120, 0.12);
+  },
   garbage() {
     tone(90, 0.18, 'sawtooth', 0.35, -30);
   },

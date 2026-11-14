@@ -3,12 +3,13 @@ import { VISIBLE_H } from '../../../shared/engine/rules';
 import type { BoardSnap, PlayerView, ResultRow, RoomView } from '../../../shared/protocol';
 import { sfx } from '../game/audio';
 import { GameView } from '../game/GameView';
-import { COLORS, drawMini, setupCanvas } from '../game/render';
+import { edgePoint, fx, type Box } from '../game/fx';
+import { COLORS, TOP_ROWS, drawMini, setupCanvas } from '../game/render';
 import { onlineSource } from '../game/sources';
 import { prefs } from '../prefs';
 import { RoomSession, inviteUrl, useSession, type SessionState } from '../net/session';
 import { ConnBadge, HandlingDialog, TopBar, navigate, toast, usePrefs, useViewport } from '../ui';
-import { boardCell } from './Solo';
+import { NARROW, TOUCHPAD_H, boardCell } from './Solo';
 
 /** Stable colour per seat (join order), used for chips and mini-board names. */
 const SEAT_COLORS = [
@@ -472,6 +473,13 @@ interface Layout {
 
 /** Split opponents into two side columns and size their boards to fit. */
 function computeLayout(vw: number, vh: number, opponents: string[]): Layout {
+  if (vw < NARROW) {
+    // phone: every opponent in one strip above the board, touch pad below it
+    const n = opponents.length;
+    const mini = n ? Math.max(2, Math.min(5, Math.floor((vw - 32 - (n - 1) * 8) / n / 10))) : 0;
+    const strip = n ? mini * VISIBLE_H + 34 : 0;
+    return { cell: boardCell(vh, 38, vw, TOUCHPAD_H + strip), mini, left: opponents, right: [], colsL: Math.max(1, n), colsR: 1 };
+  }
   let cell = boardCell(vh);
   const half = Math.ceil(opponents.length / 2);
   const left = opponents.slice(0, half);
@@ -541,6 +549,13 @@ function MiniBoard({
       if (snap.place !== null) koRef.current!.textContent = `${snap.place}位`;
     };
     draw(session.boards.get(id));
+    // skin switched: repaint from the last snapshot (no new data needed)
+    let skin = prefs.get().design;
+    const offP = prefs.subscribe((p) => {
+      if (p.design === skin) return;
+      skin = p.design;
+      draw(session.boards.get(id));
+    });
     const offB = session.onBoards((list) => {
       for (const s of list) if (s.id === id) draw(s);
     });
@@ -559,13 +574,14 @@ function MiniBoard({
     return () => {
       offB();
       offE();
+      offP();
       clearTimeout(hitTimer);
     };
   }, [session, id, mini]);
 
   const small = mini < 9;
   return (
-    <div className="mini" ref={rootRef} data-small={small} data-target={target}>
+    <div className="mini" ref={rootRef} data-small={small} data-target={target} data-pid={id}>
       <div className="mini-head">
         <span className="mini-name" style={{ ['--seat' as string]: color }}>
           {name}
@@ -620,6 +636,10 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
   const participants = info.map((p) => p.id).filter((id) => id !== s.you);
   const layout = computeLayout(vp.w, vp.h, participants);
   const out = s.myPlace !== null;
+  const arenaRef = useRef<HTMLDivElement>(null);
+  const incomingRef = useRef<HTMLDivElement>(null);
+  const roomRef = useRef(room);
+  roomRef.current = room;
 
   useEffect(
     () =>
@@ -631,8 +651,111 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
     [session, s.you],
   );
 
+  // Attack direction. Driven only by the server's `attack` events; the path is
+  // computed from where the two boards actually are on screen at that moment,
+  // so it follows any player count, layout or window size.
+  useEffect(() => {
+    const you = s.you;
+    const names = new Map((session.state.runner?.info.participants ?? []).map((p) => [p.id, p.name]));
+    const chips = new Map<string, { el: HTMLDivElement; lines: number }>();
+    const boxOf = (el: Element): Box => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    };
+    const mid = (b: Box) => ({ x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 });
+    const well = (): Box | null => {
+      const c = arenaRef.current?.querySelector('.board-canvas');
+      if (!c) return null;
+      const b = boxOf(c);
+      b.top += ((b.bottom - b.top) * TOP_ROWS) / (VISIBLE_H + TOP_ROWS);
+      return b;
+    };
+    const miniOf = (id: string) => arenaRef.current?.querySelector<HTMLElement>(`[data-pid="${CSS.escape(id)}"]`) ?? null;
+    const pulse = (el: HTMLElement | null | undefined, cls: string, color?: string) => {
+      if (!el) return;
+      if (color) el.style.setProperty('--atk', color);
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+    };
+
+    /** "INCOMING" entry per attacker; repeated hits from one attacker add up. */
+    const chip = (from: string, color: string, lines: number, angle: number | null) => {
+      const list = incomingRef.current;
+      if (!list) return;
+      let c = chips.get(from);
+      if (!c || !c.el.isConnected) {
+        const el = document.createElement('div');
+        el.className = 'incoming-chip';
+        el.append(document.createElement('i'), document.createElement('span'), document.createElement('b'));
+        el.addEventListener('animationend', () => {
+          el.remove();
+          chips.delete(from);
+        });
+        list.appendChild(el);
+        c = { el, lines: 0 };
+        chips.set(from, c);
+        while (list.childElementCount > 3) list.firstElementChild!.remove();
+      }
+      c.lines += lines;
+      const [arrow, name, n] = c.el.children as unknown as HTMLElement[];
+      c.el.style.setProperty('--seat', color);
+      arrow.style.transform = angle === null ? '' : `rotate(${angle}rad)`;
+      arrow.dataset.unknown = String(angle === null);
+      name.textContent = names.get(from) ?? '不明';
+      n.textContent = `+${c.lines}`;
+      c.el.dataset.heavy = String(c.lines >= 4);
+      pulse(c.el, 'show');
+    };
+
+    const off = session.onEvent((e) => {
+      if (e.k !== 'attack' || (e.to !== you && e.from !== you)) return;
+      const w = well();
+      const wrap = arenaRef.current?.querySelector<HTMLElement>('.board-wrap');
+      if (e.to === you) {
+        const color = seatColor(roomRef.current, e.from);
+        const src = miniOf(e.from)?.querySelector('.mini-board');
+        sfx.incoming(e.lines);
+        if (!w || !src) {
+          // attacker's position unknown: no guessed direction, warn around the board instead
+          chip(e.from, color, e.lines, null);
+          pulse(wrap, 'warn', color);
+          return;
+        }
+        const from = mid(boxOf(src));
+        const entry = edgePoint(w, from);
+        const c = mid(w);
+        const angle = Math.atan2(from.y - c.y, from.x - c.x);
+        chip(e.from, color, e.lines, angle);
+        pulse(miniOf(e.from), 'atk', color);
+        fx.beam(from, entry, color, e.lines, () => {
+          const inward = Math.atan2(entry.y - from.y, entry.x - from.x);
+          fx.burst(entry.x, entry.y, color, 10 + e.lines * 7, { angle: inward, spread: 1.5, speed: 200 + e.lines * 25, ttl: 0.4, gravity: 0 });
+          fx.ring(entry.x, entry.y, color, 26 + e.lines * 9, 320, 2 + e.lines * 0.4);
+          pulse(wrap, 'struck', color);
+        });
+      } else {
+        const color = seatColor(roomRef.current, you);
+        const dst = miniOf(e.to)?.querySelector('.mini-board');
+        if (!w || !dst) return;
+        const to = mid(boxOf(dst));
+        const start = edgePoint(w, to);
+        pulse(miniOf(e.to), 'targeted', color);
+        if (e.lines >= 4) fx.ring(start.x, start.y, color, 70, 360, 3);
+        fx.beam(start, to, color, e.lines, () => {
+          fx.burst(to.x, to.y, color, 8 + e.lines * 6, { speed: 150 + e.lines * 20, ttl: 0.4, gravity: 120 });
+          fx.ring(to.x, to.y, color, 18 + e.lines * 8, 300, 2 + e.lines * 0.3);
+        });
+      }
+    });
+    return () => {
+      off();
+      for (const c of chips.values()) c.el.remove();
+    };
+  }, [session, s.you, s.runner]);
+
   return (
-    <div className="arena">
+    <div className="arena" ref={arenaRef}>
       <OpponentColumn ids={layout.left} cols={layout.colsL} mini={layout.mini} session={session} room={room} participants={info} />
       <GameView
         source={source}
@@ -640,6 +763,8 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
         onMenu={() => !s.results && setMenu((m) => !m)}
         inputEnabled={!out && !s.results}
         onController={(k) => (session.keyboard = k)}
+        mode="battle"
+        leftExtra={<div className="incoming" ref={incomingRef} aria-live="polite" />}
       >
         {out && !s.results && (
           <div className="board-panel board-panel-ko">

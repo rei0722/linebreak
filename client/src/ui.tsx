@@ -1,7 +1,7 @@
 // Shared UI pieces: router, top bar, toast, settings dialog, viewport hook.
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { prefs } from './prefs';
+import { prefs, type Design, type FxQuality } from './prefs';
 import type { ConnStatus } from './net/connection';
 
 // ------------------------------------------------------------ router
@@ -139,12 +139,49 @@ function SpeakerIcon({ on }: { on: boolean }) {
   );
 }
 
+const DESIGNS: { id: Design; label: string; short: string }[] = [
+  { id: 'classic', label: 'CLASSIC', short: 'CLASSIC' },
+  { id: 'neon', label: 'NEON CYBER ARENA', short: 'NEON' },
+];
+const FX_LEVELS: FxQuality[] = ['high', 'medium', 'low'];
+
+/** Skin and effects switches. Safe mid-game: they only change how things are drawn. */
+export function DisplayControls() {
+  const p = usePrefs();
+  // drop focus after a click so Space / arrows keep going to the game
+  const pick = (e: React.MouseEvent<HTMLButtonElement>, patch: Parameters<typeof prefs.set>[0]) => {
+    e.currentTarget.blur();
+    prefs.set(patch);
+  };
+  return (
+    <div className="display-controls">
+      <div className="seg seg-sm" role="group" aria-label="デザイン">
+        {DESIGNS.map((d) => (
+          <button key={d.id} aria-pressed={p.design === d.id} title={`デザイン：${d.label}`} onClick={(e) => pick(e, { design: d.id })}>
+            <span className="wide">{d.label}</span>
+            <span className="narrow">{d.short}</span>
+          </button>
+        ))}
+      </div>
+      <div className="seg seg-sm seg-fx" role="group" aria-label="エフェクト品質">
+        {FX_LEVELS.map((q) => (
+          <button key={q} aria-pressed={p.fx === q} title={`エフェクト品質：${q.toUpperCase()}`} onClick={(e) => pick(e, { fx: q })}>
+            <span className="wide">{q.toUpperCase()}</span>
+            <span className="narrow">{q[0].toUpperCase()}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function TopBar({ children }: { children?: ReactNode }) {
   return (
     <header className="topbar">
       <Wordmark />
       {children}
       <span className="topbar-spacer" />
+      <DisplayControls />
       <SoundToggle />
     </header>
   );

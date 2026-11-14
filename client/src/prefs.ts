@@ -3,14 +3,21 @@
 
 import { DEFAULT_HANDLING, clampHandling, type Handling } from '../../shared/engine/rules';
 
+export type Design = 'classic' | 'neon';
+export type FxQuality = 'high' | 'medium' | 'low';
+
 export interface Prefs {
   name: string;
   sound: boolean;
   handling: Handling;
+  /** Visual skin only — never read by game logic or networking. */
+  design: Design;
+  /** Upper bound for effects; the runtime may drop below it when frames are slow. */
+  fx: FxQuality;
 }
 
 const KEY = 'linebreak.prefs';
-const DEFAULTS: Prefs = { name: '', sound: true, handling: DEFAULT_HANDLING };
+const DEFAULTS: Prefs = { name: '', sound: true, handling: DEFAULT_HANDLING, design: 'classic', fx: 'high' };
 
 function read(): Prefs {
   try {
@@ -19,6 +26,8 @@ function read(): Prefs {
       name: typeof raw.name === 'string' ? raw.name.slice(0, 16) : '',
       sound: raw.sound !== false,
       handling: clampHandling(raw.handling),
+      design: raw.design === 'neon' ? 'neon' : 'classic',
+      fx: raw.fx === 'low' || raw.fx === 'medium' ? raw.fx : 'high',
     };
   } catch {
     return { ...DEFAULTS };
@@ -63,6 +72,24 @@ export const seat = {
   clear(room: string) {
     try {
       sessionStorage.removeItem(`linebreak.seat.${room}`);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
+/** Personal best per mode, kept in this browser only. */
+export const hiScore = {
+  get(mode: 'solo' | 'battle'): number {
+    try {
+      return Number(localStorage.getItem(`linebreak.hi.${mode}`)) || 0;
+    } catch {
+      return 0;
+    }
+  },
+  set(mode: 'solo' | 'battle', v: number) {
+    try {
+      localStorage.setItem(`linebreak.hi.${mode}`, String(v));
     } catch {
       /* ignore */
     }

@@ -6,9 +6,16 @@ import { TOP_ROWS } from '../game/render';
 import { sfx } from '../game/audio';
 import { HandlingDialog, TopBar, navigate, useViewport } from '../ui';
 
-export function boardCell(h: number, max = 38) {
+/** Below this width the layout is a phone: touch pad under the board, opponents above it. */
+export const NARROW = 760;
+export const TOUCHPAD_H = 132;
+
+export function boardCell(h: number, max = 38, w = Infinity, reserve = 0) {
   // topbar 52 + vertical padding; board is 20 rows plus the 2-row spawn margin
-  return Math.max(16, Math.min(max, Math.floor((h - 52 - 40) / (VISIBLE_H + TOP_ROWS))));
+  const byH = Math.floor((h - 52 - 40 - reserve) / (VISIBLE_H + TOP_ROWS));
+  // board (10) + two side panels (4.2 each) + gaps must fit the width
+  const byW = Math.floor((w - 64) / 18.4);
+  return Math.max(w < NARROW ? 12 : 16, Math.min(max, byH, byW));
 }
 
 export function Solo() {
@@ -18,7 +25,7 @@ export function Solo() {
   const [settings, setSettings] = useState(false);
   const [over, setOver] = useState<null | 'topout' | 'finish'>(null);
   const [, force] = useState(0);
-  const cell = boardCell(vp.h);
+  const cell = boardCell(vp.h, 38, vp.w, vp.w < NARROW ? TOUCHPAD_H : 0);
 
   useEffect(() => {
     const onVis = () => {
@@ -63,6 +70,7 @@ export function Solo() {
           onMenu={toggleMenu}
           inputEnabled={!menu && !over}
           showMeter={false}
+          mode="solo"
           onEvent={(e) => {
             if (e.k === 'over') {
               setOver(e.reason);
