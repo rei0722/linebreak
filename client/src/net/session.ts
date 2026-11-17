@@ -4,14 +4,17 @@
 
 import { useSyncExternalStore } from 'react';
 import type { KeyboardController } from '../game/input';
-import { prefs, seat } from '../prefs';
+import { creatorKey, prefs, seat } from '../prefs';
 import {
+  CHAT_HISTORY,
   PROTOCOL_VERSION,
   type BoardSnap,
+  type ChatMsg,
   type ErrorCode,
   type ResultRow,
   type RoomView,
   type ServerMsg,
+  type StampId,
 } from '../../../shared/protocol';
 import { Connection, type ConnStatus } from './connection';
 import { MatchRunner } from './matchRunner';
@@ -34,7 +37,8 @@ export function inviteUrl(roomId: string): string {
 export type SessionEvent =
   | { k: 'ko'; id: string; place: number; by: string | null }
   | { k: 'attack'; from: string; to: string; lines: number }
-  | { k: 'end'; results: ResultRow[] };
+  | { k: 'end'; results: ResultRow[] }
+  | { k: 'chat'; msg: ChatMsg };
 
 export interface SessionState {
   status: ConnStatus;
@@ -47,6 +51,8 @@ export interface SessionState {
   results: ResultRow[] | null;
   /** place if you were knocked out this match */
   myPlace: number | null;
+  /** Lobby chat, oldest first. */
+  chat: ChatMsg[];
 }
 
 const FATAL: ErrorCode[] = ['ROOM_NOT_FOUND', 'ROOM_FULL', 'KICKED', 'VERSION'];
@@ -76,6 +82,7 @@ export class RoomSession {
       runner: null,
       results: null,
       myPlace: null,
+      chat: [],
     };
     this.conn.onStatus((status) => this.patch({ status }));
     this.conn.onOpen(() => this.hello());
@@ -85,6 +92,7 @@ export class RoomSession {
   private hello() {
     const p = prefs.get();
     const name = p.name || 'プレイヤー';
+    const key = creatorKey.get();
     if (this.roomId) {
       this.conn.send({
         t: 'join',
@@ -93,9 +101,10 @@ export class RoomSession {
         handling: p.handling,
         token: seat.get(this.roomId),
         v: PROTOCOL_VERSION,
+        key,
       });
     } else {
-      this.conn.send({ t: 'create', name, handling: p.handling, v: PROTOCOL_VERSION });
+      this.conn.send({ t: 'create', name, handling: p.handling, v: PROTOCOL_VERSION, key });
     }
   }
 
@@ -141,6 +150,13 @@ export class RoomSession {
         break;
       case 'countdown':
         this.startRunner(m.match);
+        break;
+      case 'chatlog':
+        this.patch({ chat: m.msgs });
+        break;
+      case 'chat':
+        this.patch({ chat: [...this.state.chat, m.msg].slice(-CHAT_HISTORY) });
+        this.emit({ k: 'chat', msg: m.msg });
         break;
       case 'boards':
         for (const s of m.s) this.boards.set(s.id, s);
@@ -192,6 +208,12 @@ export class RoomSession {
   }
   kick(id: string) {
     this.conn.send({ t: 'kick', id });
+  }
+  sendChat(text: string) {
+    return this.conn.send({ t: 'chat', text });
+  }
+  sendStamp(stamp: StampId) {
+    return this.conn.send({ t: 'chat', stamp });
   }
   updateSettings(settings: Partial<RoomView['settings']>) {
     this.conn.send({ t: 'settings', settings });

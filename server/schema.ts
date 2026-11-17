@@ -1,6 +1,6 @@
 // Runtime validation for everything a client can send.
 import { z } from 'zod';
-import type { ClientMsg } from '../shared/protocol';
+import { STAMP_IDS, type ClientMsg } from '../shared/protocol';
 import { MAX_EVENTS_PER_BATCH } from './match';
 
 const int = z.number().int();
@@ -8,7 +8,7 @@ const handling = z.object({ das: z.number(), arr: z.number(), sdf: z.number() })
 const name = z.string().max(64);
 
 const schema = z.discriminatedUnion('t', [
-  z.object({ t: z.literal('create'), name, handling, v: int }),
+  z.object({ t: z.literal('create'), name, handling, v: int, key: z.string().max(128).optional() }),
   z.object({
     t: z.literal('join'),
     room: z.string().max(16),
@@ -16,6 +16,7 @@ const schema = z.discriminatedUnion('t', [
     handling,
     token: z.string().max(64).optional(),
     v: int,
+    key: z.string().max(128).optional(),
   }),
   z.object({ t: z.literal('leave') }),
   z.object({ t: z.literal('ready'), ready: z.boolean() }),
@@ -35,6 +36,7 @@ const schema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('pause') }),
   z.object({ t: z.literal('resume') }),
   z.object({ t: z.literal('kick'), id: z.string().max(32) }),
+  z.object({ t: z.literal('chat'), text: z.string().max(400).optional(), stamp: z.enum(STAMP_IDS).optional() }),
   z.object({ t: z.literal('ping'), c: z.number() }),
   z.object({
     t: z.literal('in'),
@@ -67,4 +69,13 @@ export function cleanName(raw: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   return [...s].slice(0, 16).join('') || 'プレイヤー';
+}
+
+/** Chat text: no control / bidi characters, single-line, CHAT_MAX characters. */
+export function cleanChat(raw: string, max: number): string {
+  const s = raw
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [...s].slice(0, max).join('');
 }

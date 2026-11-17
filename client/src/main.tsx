@@ -4,8 +4,10 @@ import { App } from './App';
 import './styles.css';
 import './app.css';
 import './neon.css';
-import { prefs } from './prefs';
+import { creatorKey, prefs } from './prefs';
 import { setDesign } from './game/render';
+
+creatorKey.captureFromUrl();
 
 // The skin is presentation only: one attribute for CSS, one flag for the canvas code.
 const applyDesign = () => {

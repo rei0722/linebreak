@@ -78,6 +78,7 @@ See `.env.example`. A default single-service deployment needs **no settings at a
 | --- | --- | --- |
 | `PORT` | Runtime | Listen port (default 8787; usually set by the host) |
 | `HOST` | Runtime | Bind address (default `0.0.0.0`) |
+| `CREATOR_KEY` | Runtime | Secret for the creator badge in lobbies. Open the site once with `?creator=<value>` (`?creator=off` to forget it). Empty = no badge |
 | `ALLOWED_ORIGINS` | Runtime | Comma-separated origins allowed to connect to `/ws`. Empty allows any origin. Set it when the frontend runs on a different domain |
 | `STATIC_DIR` | Runtime | Directory with the built client (default `client/dist`) |
 | `VITE_SERVER_URL` | Build | Backend origin when frontend and backend are deployed separately, e.g. `https://linebreak-api.fly.dev` |

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { VISIBLE_H } from '../../../shared/engine/rules';
-import type { BoardSnap, PauseInfo, PlayerView, ResultRow, RoomView } from '../../../shared/protocol';
+import { CHAT_MAX, STAMPS, type BoardSnap, type PauseInfo, type PlayerView, type ResultRow, type RoomView } from '../../../shared/protocol';
 import { bestMove } from '../game/ai';
 import { sfx } from '../game/audio';
 import { GameView } from '../game/GameView';
@@ -369,6 +369,7 @@ function Lobby({ session, s, room }: { session: RoomSession; s: SessionState; ro
           )}
         </footer>
       </section>
+      <LobbyChat session={session} s={s} room={room} />
       {handling && <HandlingDialog onClose={() => setHandling(false)} />}
     </div>
   );
@@ -400,10 +401,17 @@ function PlayerRow({
   const status = !p.connected ? '切断中' : p.spectator ? '次の対戦から' : p.host ? 'ホスト' : p.ready ? '準備完了' : '準備中';
   const tone = !p.connected ? 'off' : p.host ? 'host' : p.ready ? 'ready' : 'wait';
   return (
-    <li className="player" data-me={me}>
-      <span className="chip" style={{ background: color }} aria-hidden />
+    <li className="player" data-me={me} data-creator={p.creator}>
+      {p.creator ? (
+        <span className="creator-crown" aria-hidden>
+          ♛
+        </span>
+      ) : (
+        <span className="chip" style={{ background: color }} aria-hidden />
+      )}
       <span className="player-name">
-        {p.name}
+        <span className="player-name-text">{p.name}</span>
+        {p.creator && <CreatorBadge />}
         {me && <span className="tag-you">あなた</span>}
       </span>
       {p.wins > 0 && <span className="wins num">{p.wins}勝</span>}
@@ -416,6 +424,93 @@ function PlayerRow({
         </button>
       )}
     </li>
+  );
+}
+
+function CreatorBadge({ small = false }: { small?: boolean }) {
+  return (
+    <span className="creator-badge" data-small={small} title="このサイトの制作者">
+      <span aria-hidden>✦</span> 制作者
+    </span>
+  );
+}
+
+const STAMP_BY_ID = new Map<string, (typeof STAMPS)[number]>(STAMPS.map((st) => [st.id, st]));
+
+function LobbyChat({ session, s, room }: { session: RoomSession; s: SessionState; room: RoomView }) {
+  const [text, setText] = useState('');
+  const logRef = useRef<HTMLOListElement>(null);
+  const last = s.chat[s.chat.length - 1]?.id;
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [last]);
+
+  const send = (e: FormEvent) => {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    if (session.sendChat(t)) setText('');
+    else toast('接続が戻ってから送信してください');
+  };
+
+  return (
+    <section className="lobby-chat" aria-label="チャット">
+      <header className="players-head">
+        <h2>チャット</h2>
+      </header>
+      <ol className="chat-log" ref={logRef} aria-live="polite">
+        {s.chat.length === 0 && <li className="chat-empty">まだ誰も話していません。スタンプであいさつしてみましょう。</li>}
+        {s.chat.map((m) => {
+          const st = m.stamp ? STAMP_BY_ID.get(m.stamp) : undefined;
+          return (
+            <li key={m.id} className="chat-msg" data-me={m.from === s.you} data-creator={m.creator}>
+              <span className="chat-name" style={m.creator ? undefined : { color: seatColor(room, m.from) }}>
+                {m.name}
+                {m.creator && <CreatorBadge small />}
+              </span>
+              {st ? (
+                <span className="chat-stamp" title={st.label}>
+                  <span className="chat-stamp-emoji" aria-hidden>
+                    {st.emoji}
+                  </span>
+                  <span className="chat-stamp-label">{st.label}</span>
+                </span>
+              ) : (
+                <span className="chat-text">{m.text}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="stamp-bar" role="group" aria-label="スタンプを送る">
+        {STAMPS.map((st) => (
+          <button
+            key={st.id}
+            type="button"
+            className="stamp-btn"
+            title={st.label}
+            aria-label={`スタンプ「${st.label}」を送る`}
+            onClick={() => session.sendStamp(st.id)}
+          >
+            {st.emoji}
+          </button>
+        ))}
+      </div>
+      <form className="chat-form" onSubmit={send}>
+        <input
+          className="field"
+          maxLength={CHAT_MAX}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="メッセージを入力（Enterで送信）"
+          aria-label="チャットメッセージ"
+        />
+        <button className="btn btn-primary" type="submit" disabled={!text.trim()}>
+          送信
+        </button>
+      </form>
+    </section>
   );
 }
 

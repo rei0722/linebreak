@@ -99,3 +99,30 @@ export const hiScore = {
     }
   },
 };
+
+/** The creator's secret, set once by opening any page with `?creator=<CREATOR_KEY>`
+    (`?creator=off` forgets it). Sent on create/join; the server decides if it is valid. */
+const CREATOR_KEY = 'linebreak.creatorKey';
+export const creatorKey = {
+  get(): string | undefined {
+    try {
+      return localStorage.getItem(CREATOR_KEY) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  },
+  /** Reads `?creator=` from the address bar, stores it, and removes it from the URL. */
+  captureFromUrl() {
+    const url = new URL(location.href);
+    const v = url.searchParams.get('creator');
+    if (v === null) return;
+    try {
+      if (v === '' || v === 'off') localStorage.removeItem(CREATOR_KEY);
+      else localStorage.setItem(CREATOR_KEY, v.slice(0, 128));
+    } catch {
+      /* ignore */
+    }
+    url.searchParams.delete('creator');
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  },
+};

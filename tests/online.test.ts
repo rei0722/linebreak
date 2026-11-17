@@ -399,3 +399,82 @@ describe('matches', () => {
     bots.forEach((b) => b.close());
   }, 30000);
 });
+
+describe('lobby chat and creator badge', () => {
+  test('only a client with the right CREATOR_KEY is marked as the creator', async () => {
+    const before = process.env.CREATOR_KEY;
+    process.env.CREATOR_KEY = 'test-secret';
+    try {
+      const real = new Bot('maker');
+      const fake = new Bot('maker');
+      await Promise.all([real.ready(), fake.ready()]);
+      real.conn.send({ t: 'create', name: 'maker', handling: DEFAULT_HANDLING, v: PROTOCOL_VERSION, key: 'test-secret' });
+      await waitFor(() => !!real.room);
+      fake.conn.send({
+        t: 'join',
+        room: real.room!.id,
+        name: 'maker',
+        handling: DEFAULT_HANDLING,
+        v: PROTOCOL_VERSION,
+        key: 'wrong',
+      });
+      await waitFor(() => fake.room?.players.length === 2);
+      const [a, b] = fake.room!.players;
+      expect(a.creator).toBe(true);
+      expect(b.creator).toBe(false);
+      real.close();
+      fake.close();
+    } finally {
+      process.env.CREATOR_KEY = before;
+    }
+  });
+
+  test('nobody is the creator when CREATOR_KEY is not set', async () => {
+    const before = process.env.CREATOR_KEY;
+    delete process.env.CREATOR_KEY;
+    try {
+      const b = new Bot('x');
+      await b.ready();
+      b.conn.send({ t: 'create', name: 'x', handling: DEFAULT_HANDLING, v: PROTOCOL_VERSION, key: '' });
+      await waitFor(() => !!b.room);
+      expect(b.room!.players[0].creator).toBe(false);
+      b.close();
+    } finally {
+      process.env.CREATOR_KEY = before;
+    }
+  });
+
+  test('chat and stamps reach everyone, are cleaned, and late joiners get the history', async () => {
+    const { bots, id } = await makeRoom(2);
+    bots[0].conn.send({ t: 'chat', text: '  hello‮\n   world  ' + 'x'.repeat(200) });
+    bots[1].conn.send({ t: 'chat', stamp: 'gg' });
+    bots[1].conn.send({ t: 'chat', text: '   ' });
+    await waitFor(() => bots.every((b) => b.msgs.filter((m) => m.t === 'chat').length === 2));
+    const got = bots[1].msgs.filter((m) => m.t === 'chat').map((m) => (m as Extract<ServerMsg, { t: 'chat' }>).msg);
+    expect(got[0].text!.startsWith('hello world xxx')).toBe(true);
+    expect([...got[0].text!].length).toBe(80);
+    expect(got[0]).toMatchObject({ from: bots[0].you, name: 'bot1', creator: false });
+    expect(got[1]).toMatchObject({ stamp: 'gg', from: bots[1].you });
+    expect(got[1].text).toBeUndefined();
+
+    // unknown stamps are rejected by the schema
+    bots[1].conn.send({ t: 'chat', stamp: 'nope' } as never);
+    await waitFor(() => bots[1].last('error')?.code === 'BAD_REQUEST');
+
+    const late = new Bot('late');
+    await late.ready();
+    late.join(id);
+    await waitFor(() => !!late.last('chatlog'));
+    expect(late.last('chatlog')!.msgs.map((m) => m.id)).toEqual(got.map((m) => m.id));
+    [...bots, late].forEach((b) => b.close());
+  });
+
+  test('chat flooding is rate limited', async () => {
+    const { bots } = await makeRoom(2);
+    for (let i = 0; i < 12; i++) bots[0].conn.send({ t: 'chat', text: `m${i}` });
+    await waitFor(() => bots[0].last('error')?.code === 'RATE_LIMITED');
+    await sleep(100);
+    expect(bots[1].msgs.filter((m) => m.t === 'chat').length).toBe(5);
+    bots.forEach((b) => b.close());
+  });
+});

@@ -10,6 +10,36 @@ export const ROOM_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 export const ROOM_ID_LENGTH = 6;
 export const ROOM_ID_RE = new RegExp(`^[${ROOM_ALPHABET}]{${ROOM_ID_LENGTH}}$`);
 export const NAME_MAX = 16;
+/** Lobby chat: longest message (characters) and how many the room keeps. */
+export const CHAT_MAX = 80;
+export const CHAT_HISTORY = 50;
+
+/** Lobby stamps. The id goes over the wire; the client draws the face. */
+export const STAMPS = [
+  { id: 'hi', emoji: '👋', label: 'よろしく！' },
+  { id: 'gg', emoji: '🤝', label: 'GG' },
+  { id: 'lol', emoji: '😂', label: 'わら' },
+  { id: 'wow', emoji: '😲', label: 'すごっ' },
+  { id: 'fire', emoji: '🔥', label: '燃えてきた' },
+  { id: 'cry', emoji: '😭', label: 'くやしい' },
+  { id: 'ok', emoji: '👍', label: 'OK' },
+  { id: 'wait', emoji: '✋', label: 'ちょっと待って' },
+  { id: 'again', emoji: '🔁', label: 'もう1回！' },
+  { id: 'bye', emoji: '🌙', label: 'おつかれ' },
+] as const;
+export type StampId = (typeof STAMPS)[number]['id'];
+export const STAMP_IDS = STAMPS.map((s) => s.id) as [StampId, ...StampId[]];
+
+export interface ChatMsg {
+  id: number;
+  from: string;
+  name: string;
+  /** Sender is the site's creator (verified by the server). */
+  creator: boolean;
+  at: number;
+  text?: string;
+  stamp?: StampId;
+}
 
 export type Targeting = 'random' | 'roundRobin';
 
@@ -57,6 +87,8 @@ export interface PlayerView {
   /** Joined while a match was running: watches, plays next round. */
   spectator: boolean;
   wins: number;
+  /** The site's creator, verified server-side with CREATOR_KEY. */
+  creator: boolean;
 }
 
 export interface RoomView {
@@ -124,8 +156,8 @@ export type ErrorCode =
 // ------------------------------------------------------------- client → server
 
 export type ClientMsg =
-  | { t: 'create'; name: string; handling: Handling; v: number }
-  | { t: 'join'; room: string; name: string; handling: Handling; token?: string; v: number }
+  | { t: 'create'; name: string; handling: Handling; v: number; key?: string }
+  | { t: 'join'; room: string; name: string; handling: Handling; token?: string; v: number; key?: string }
   | { t: 'leave' }
   | { t: 'ready'; ready: boolean }
   | { t: 'name'; name: string }
@@ -134,6 +166,7 @@ export type ClientMsg =
   | { t: 'pause' }
   | { t: 'resume' }
   | { t: 'kick'; id: string }
+  | { t: 'chat'; text?: string; stamp?: StampId }
   | { t: 'ping'; c: number }
   | {
       t: 'in';
@@ -155,6 +188,8 @@ export type ServerMsg =
   | { t: 'welcome'; you: string; token: string; room: RoomView }
   | { t: 'room'; room: RoomView }
   | { t: 'pong'; c: number; s: number }
+  | { t: 'chat'; msg: ChatMsg }
+  | { t: 'chatlog'; msgs: ChatMsg[] }
   | { t: 'error'; code: ErrorCode; msg: string }
   | { t: 'countdown'; match: MatchInfo }
   | {

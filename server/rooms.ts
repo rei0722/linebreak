@@ -1,14 +1,17 @@
 // Room lifecycle, membership, host rights and message routing.
 // Transport-agnostic: index.ts adapts WebSocket connections to `Conn`.
 
-import { randomBytes, randomInt } from 'node:crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { clampHandling, type Handling } from '../shared/engine/rules';
 import {
+  CHAT_HISTORY,
+  CHAT_MAX,
   DEFAULT_SETTINGS,
   PROTOCOL_VERSION,
   ROOM_ALPHABET,
   ROOM_ID_LENGTH,
   ROOM_ID_RE,
+  type ChatMsg,
   type ClientMsg,
   type ErrorCode,
   type Phase,
@@ -18,7 +21,7 @@ import {
   type ServerMsg,
 } from '../shared/protocol';
 import { Match, type MatchHost } from './match';
-import { cleanName } from './schema';
+import { cleanChat, cleanName } from './schema';
 
 export const COUNTDOWN_MS = 3500;
 /** Lobby members who drop are kept this long so a page reload keeps their seat. */
@@ -26,6 +29,17 @@ export const SEAT_GRACE_MS = 30_000;
 /** A disconnected host hands over after this long. */
 export const HOST_GRACE_MS = 10_000;
 export const HARD_MAX_PLAYERS = 16;
+/** Chat flood control per player: a burst of CHAT_BURST, then one per CHAT_EVERY_MS. */
+export const CHAT_BURST = 5;
+export const CHAT_EVERY_MS = 800;
+
+const digest = (s: string) => createHash('sha256').update(s).digest();
+
+/** True when `key` matches the server's CREATOR_KEY. No key configured = nobody is the creator. */
+export function isCreatorKey(key: string | undefined, secret = process.env.CREATOR_KEY ?? ''): boolean {
+  if (!secret || !key) return false;
+  return timingSafeEqual(digest(key), digest(secret));
+}
 
 export interface Conn {
   readonly id: number;
@@ -42,6 +56,9 @@ interface RoomPlayer {
   ready: boolean;
   spectator: boolean;
   wins: number;
+  creator: boolean;
+  chatTokens: number;
+  chatLast: number;
   joinedAt: number;
   disconnectedAt: number | null;
 }
@@ -55,7 +72,9 @@ export class Room implements MatchHost {
   settings: RoomSettings = { ...DEFAULT_SETTINGS };
   match: Match | null = null;
   lastResults: ResultRow[] | null = null;
+  readonly chat: ChatMsg[] = [];
   private matchCounter = 0;
+  private chatCounter = 0;
 
   constructor(
     readonly id: string,
@@ -108,6 +127,7 @@ export class Room implements MatchHost {
           connected: p.conn !== null,
           spectator: p.spectator,
           wins: p.wins,
+          creator: p.creator,
         })),
       settings: this.settings,
       match: this.match ? this.match.info : null,
@@ -124,7 +144,7 @@ export class Room implements MatchHost {
     return this.players.size >= this.settings.maxPlayers;
   }
 
-  add(conn: Conn, name: string, handling: Handling): RoomPlayer {
+  add(conn: Conn, name: string, handling: Handling, creator = false): RoomPlayer {
     let id: string;
     do id = randomBytes(5).toString('hex');
     while (this.players.has(id));
@@ -137,6 +157,9 @@ export class Room implements MatchHost {
       ready: false,
       spectator: this.phase !== 'lobby',
       wins: 0,
+      creator,
+      chatTokens: CHAT_BURST,
+      chatLast: this.now(),
       joinedAt: this.now() + this.players.size * 1e-3,
       disconnectedAt: null,
     };
@@ -161,6 +184,7 @@ export class Room implements MatchHost {
 
   welcome(p: RoomPlayer) {
     p.conn?.send({ t: 'welcome', you: p.id, token: p.token, room: this.view() });
+    p.conn?.send({ t: 'chatlog', msgs: this.chat });
     if (this.match && (this.phase === 'countdown' || this.phase === 'playing')) {
       p.conn?.send({ t: 'boards', m: this.match.info.id, s: this.match.allSnapshots() });
       if (this.match.isParticipant(p.id) && this.phase === 'playing') this.match.rejoin(p.id, this.now());
@@ -204,6 +228,8 @@ export class Room implements MatchHost {
         this.broadcastRoom();
         return null;
       }
+      case 'chat':
+        return this.chatFrom(p, msg.text, msg.stamp);
       case 'start':
         return this.start(p);
       case 'pause':
@@ -225,6 +251,23 @@ export class Room implements MatchHost {
       default:
         return null;
     }
+  }
+
+  private chatFrom(p: RoomPlayer, rawText: string | undefined, stamp: ChatMsg['stamp']): ServerMsg | null {
+    const text = rawText === undefined ? '' : cleanChat(rawText, CHAT_MAX);
+    if (!text && !stamp) return null;
+    const now = this.now();
+    p.chatTokens = Math.min(CHAT_BURST, p.chatTokens + (now - p.chatLast) / CHAT_EVERY_MS);
+    p.chatLast = now;
+    if (p.chatTokens < 1) return err('RATE_LIMITED', 'チャットの送信が速すぎます。少し待ってください');
+    p.chatTokens--;
+    const msg: ChatMsg = { id: ++this.chatCounter, from: p.id, name: p.name, creator: p.creator, at: now };
+    if (stamp) msg.stamp = stamp;
+    else msg.text = text;
+    this.chat.push(msg);
+    if (this.chat.length > CHAT_HISTORY) this.chat.splice(0, this.chat.length - CHAT_HISTORY);
+    this.broadcast({ t: 'chat', msg });
+    return null;
   }
 
   private start(p: RoomPlayer): ServerMsg | null {
@@ -367,6 +410,7 @@ export class RoomManager {
       }
       this.leaveCurrent(st);
       const name = cleanName(msg.name);
+      const creator = isCreatorKey(msg.key);
       const handling = clampHandling(msg.handling);
       let room: Room | undefined;
       if (msg.t === 'create') {
@@ -384,12 +428,13 @@ export class RoomManager {
       if (p) {
         room.attach(p, conn);
         p.handling = handling;
+        p.creator = creator;
       } else {
         if (room.full) {
           conn.send(err('ROOM_FULL', `満員です（最大${room.settings.maxPlayers}人）`));
           return;
         }
-        p = room.add(conn, name, handling);
+        p = room.add(conn, name, handling, creator);
       }
       st.room = room;
       st.player = p.id;
