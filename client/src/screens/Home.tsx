@@ -65,6 +65,7 @@ export function Home() {
     <div className="screen">
       <TopBar />
       <main className="screen-body home">
+        <p className="credit">制作者　3-5　伊藤 璃晴</p>
         <section className="home-main">
           <h1 className="home-title">
             部屋を作って、
@@ -142,7 +143,6 @@ export function Home() {
               操作設定を変更
             </button>
           </div>
-          <p className="credit">制作者　3-5　伊藤 璃晴</p>
         </section>
         <section className="home-demo" aria-hidden>
           <DemoBoard cell={cell} />

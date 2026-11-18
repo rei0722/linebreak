@@ -1530,11 +1530,13 @@
 
 /* ============================================================ credit */
 .credit {
-  margin: var(--s5) 0 0;
-  font-size: 11px;
+  position: absolute;
+  top: var(--s3);
+  right: var(--s5);
+  z-index: 1;
+  margin: 0;
+  font-size: 13px;
   letter-spacing: 0.08em;
-  color: var(--text-faint);
-}
-.lobby-info .credit {
-  margin-top: 0;
+  color: var(--text-dim);
+  pointer-events: none;
 }

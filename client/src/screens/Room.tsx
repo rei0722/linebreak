@@ -269,6 +269,7 @@ function Lobby({ session, s, room }: { session: RoomSession; s: SessionState; ro
 
   return (
     <div className="lobby">
+      <p className="credit">制作者　3-5　伊藤 璃晴</p>
       <section className="lobby-info">
         <div className="room-code-block">
           <span className="label">部屋コード</span>
@@ -315,7 +316,6 @@ function Lobby({ session, s, room }: { session: RoomSession; s: SessionState; ro
         <button className="btn btn-quiet btn-sm lobby-handling" onClick={() => setHandling(true)}>
           操作設定（長押し・落下速度）
         </button>
-        <p className="credit">制作者　3-5　伊藤 璃晴</p>
       </section>
 
       <section className="lobby-players" aria-label="参加者">
