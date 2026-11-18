@@ -142,6 +142,7 @@ export function Home() {
               操作設定を変更
             </button>
           </div>
+          <p className="credit">制作者　3-5　伊藤 璃晴</p>
         </section>
         <section className="home-demo" aria-hidden>
           <DemoBoard cell={cell} />

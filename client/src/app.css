@@ -1527,3 +1527,14 @@
     animation-duration: 1ms;
   }
 }
+
+/* ============================================================ credit */
+.credit {
+  margin: var(--s5) 0 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+.lobby-info .credit {
+  margin-top: 0;
+}
