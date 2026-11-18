@@ -1535,8 +1535,10 @@
   right: var(--s5);
   z-index: 1;
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--text-dim);
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
   pointer-events: none;
 }
