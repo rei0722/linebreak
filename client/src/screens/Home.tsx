@@ -4,6 +4,7 @@ import { BATTLE_RULES, DEFAULT_HANDLING, VISIBLE_H } from '../../../shared/engin
 import { ROOM_ALPHABET, ROOM_ID_LENGTH } from '../../../shared/protocol';
 import { playOne } from '../game/ai';
 import { TOP_ROWS, drawMainBoard, inDanger, newFx, setupCanvas } from '../game/render';
+import { NEWS, markNewsSeen, seenNews } from '../news';
 import { prefs } from '../prefs';
 import { ControlsList, HandlingDialog, TopBar, navigate, toast, usePrefs, useViewport } from '../ui';
 
@@ -37,6 +38,57 @@ function DemoBoard({ cell }: { cell: number }) {
   return <canvas ref={ref} className="demo-canvas" aria-hidden />;
 }
 
+const fmtDate = (d: string) => {
+  const [, m, day] = d.split('-').map(Number);
+  return `${m}/${day}`;
+};
+
+/** お知らせ: what changed recently. Items the visitor has not seen yet get a NEW mark. */
+function NewsBoard() {
+  const [all, setAll] = useState(false);
+  const [fresh] = useState(() => {
+    const seen = seenNews();
+    if (seen) return new Set(NEWS.filter((n) => !seen.has(n.id)).map((n) => n.id));
+    // first visit: only the last week counts as new
+    const newest = Date.parse(NEWS[0]?.date ?? '');
+    return new Set(NEWS.filter((n) => newest - Date.parse(n.date) <= 7 * 864e5).map((n) => n.id));
+  });
+  useEffect(() => markNewsSeen(), []);
+  const list = all ? NEWS : NEWS.slice(0, 3);
+  return (
+    <section className="news" aria-labelledby="news-title">
+      <header className="news-head">
+        <h2 id="news-title">お知らせ</h2>
+        {fresh.size > 0 && <span className="news-count">{fresh.size}件の新着</span>}
+      </header>
+      <ol className="news-list">
+        {list.map((n) => (
+          <li key={n.id} className="news-item" data-new={fresh.has(n.id)}>
+            <div className="news-meta">
+              <time className="num" dateTime={n.date}>
+                {fmtDate(n.date)}
+              </time>
+              {n.tag && (
+                <span className="news-tag" data-tag={n.tag}>
+                  {n.tag}
+                </span>
+              )}
+              {fresh.has(n.id) && <span className="news-new">NEW</span>}
+            </div>
+            <b className="news-title">{n.title}</b>
+            <p className="news-body">{n.body}</p>
+          </li>
+        ))}
+      </ol>
+      {NEWS.length > 3 && (
+        <button className="btn btn-quiet btn-sm news-more" onClick={() => setAll((v) => !v)}>
+          {all ? '閉じる' : `すべて見る（${NEWS.length}件）`}
+        </button>
+      )}
+    </section>
+  );
+}
+
 function parseCode(raw: string): string | null {
   const m = raw.trim().toUpperCase().match(new RegExp(`([${ROOM_ALPHABET}]{${ROOM_ID_LENGTH}})\\s*$`));
   return m ? m[1] : null;
@@ -67,6 +119,16 @@ export function Home() {
       <main className="screen-body home">
         <p className="credit">制作者　3-5　伊藤 璃晴</p>
         <section className="home-main">
+          {NEWS[0] && (
+            <button
+              className="news-ticker"
+              onClick={() => document.getElementById('news-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              <span className="news-ticker-label">お知らせ</span>
+              <span className="news-ticker-text">{NEWS[0].title}</span>
+              <span aria-hidden>↓</span>
+            </button>
+          )}
           <h1 className="home-title">
             部屋を作って、
             <br />
@@ -147,6 +209,7 @@ export function Home() {
         <section className="home-demo" aria-hidden>
           <DemoBoard cell={cell} />
         </section>
+        <NewsBoard />
       </main>
       {settings && <HandlingDialog onClose={() => setSettings(false)} />}
     </div>

@@ -244,6 +244,7 @@ function Lobby({ session, s, room }: { session: RoomSession; s: SessionState; ro
   const url = inviteUrl(room.id);
   const [name, setName] = useState(me?.name ?? '');
   const [handling, setHandling] = useState(false);
+  const [howTo, setHowTo] = useState(false);
   useEffect(() => setName(me?.name ?? ''), [me?.name]);
 
   const copy = async () => {
@@ -313,9 +314,14 @@ function Lobby({ session, s, room }: { session: RoomSession; s: SessionState; ro
         </div>
 
         <RulesPanel room={room} isHost={isHost} session={session} />
-        <button className="btn btn-quiet btn-sm lobby-handling" onClick={() => setHandling(true)}>
-          操作設定（長押し・落下速度）
-        </button>
+        <div className="lobby-links">
+          <button className="btn btn-quiet btn-sm lobby-howto" onClick={() => setHowTo(true)}>
+            遊び方
+          </button>
+          <button className="btn btn-quiet btn-sm lobby-handling" onClick={() => setHandling(true)}>
+            操作設定（長押し・落下速度）
+          </button>
+        </div>
       </section>
 
       <section className="lobby-players" aria-label="参加者">
@@ -372,6 +378,7 @@ function Lobby({ session, s, room }: { session: RoomSession; s: SessionState; ro
       </section>
       <LobbyChat session={session} s={s} room={room} />
       {handling && <HandlingDialog onClose={() => setHandling(false)} />}
+      {howTo && <HowToDialog mode={room.settings.mode} onClose={() => setHowTo(false)} />}
     </div>
   );
 }
@@ -518,6 +525,92 @@ function LobbyChat({ session, s, room }: { session: RoomSession; s: SessionState
         </button>
       </form>
     </section>
+  );
+}
+
+/** Rules of both battle modes, opened from the lobby. Opens on the room's current mode. */
+function HowToDialog({ mode, onClose }: { mode: RoomView['settings']['mode']; onClose: () => void }) {
+  const [tab, setTab] = useState(mode);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog howto" role="dialog" aria-label="遊び方" onClick={(e) => e.stopPropagation()}>
+        <h2>遊び方</h2>
+        <div className="seg howto-tabs" role="tablist">
+          <button role="tab" aria-pressed={tab === 'normal'} onClick={() => setTab('normal')}>
+            ノーマル
+          </button>
+          <button role="tab" aria-pressed={tab === 'aim'} onClick={() => setTab('aim')}>
+            ねらい撃ち
+          </button>
+        </div>
+
+        <ol className="howto-steps">
+          <li>
+            <b>ラインを消して攻撃</b>
+            <span>2列以上まとめて消す・続けて消す・T-スピンで、相手におじゃまブロックが届きます。1列だけでは送れません。</span>
+          </li>
+          <li>
+            <b>最後まで残れば勝ち</b>
+            <span>ブロックが上まで積み上がると脱落です。最後に1人残った人が勝ちます。</span>
+          </li>
+          {tab === 'normal' ? (
+            <li>
+              <b>攻撃先はおまかせ</b>
+              <span>おじゃまを誰に送るかは、ホストが決めたルール（ランダム／順番）でサーバーが選びます。</span>
+            </li>
+          ) : (
+            <>
+              <li>
+                <b>ねらう相手を自分で選ぶ</b>
+                <span>
+                  相手の盤面を<b>クリック</b>（スマホは<b>タップ</b>）するか、盤面の左上の番号の <kbd>1</kbd>〜<kbd>9</kbd> キーを押します。
+                </span>
+                <div className="howto-sample" aria-hidden>
+                  <div className="howto-mini" data-on="true">
+                    <span className="mini-key num">2</span>
+                    <span className="howto-mini-name">ハル</span>
+                    <span className="howto-mini-board">
+                      <span className="mini-aim-tag">ねらい中</span>
+                    </span>
+                  </div>
+                  <p>選んだ相手は<b className="howto-red">赤い枠</b>になり、あなたのおじゃまはすべてその人に届きます。</p>
+                </div>
+              </li>
+              <li>
+                <b>おまかせ（反撃）</b>
+                <span>
+                  <kbd>0</kbd> キー、または同じ盤面をもう一度押すと「おまかせ」。最後に攻撃してきた人へ自動で打ち返します。ねらった相手が脱落したときも、おまかせに戻ります。
+                </span>
+              </li>
+              <li>
+                <b>ねらわれているか見る</b>
+                <div className="howto-sample" aria-hidden>
+                  <div className="howto-mini">
+                    <span className="mini-key num">1</span>
+                    <span className="howto-mini-name">ミナ</span>
+                    <span className="mini-at-you">▶あなた</span>
+                    <span className="howto-mini-board" />
+                  </div>
+                  <p>
+                    あなたをねらっている人の盤面に<b className="howto-you">▶あなた</b>が出ます。自分の盤面の左の「ねらわれ ◯人」で、何人にねらわれているか分かります。
+                  </p>
+                </div>
+              </li>
+            </>
+          )}
+        </ol>
+        <div className="dialog-actions">
+          <button className="btn btn-primary" onClick={onClose}>
+            わかった
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1041,6 +1134,23 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
           </>
         }
       >
+        {aimMode && room.phase === 'countdown' && (
+          <div className="aim-intro" role="status">
+            <b className="aim-intro-title">ねらい撃ち</b>
+            <span>
+              {vp.w < NARROW ? (
+                <>相手の盤面を<b>タップ</b>して、おじゃまを送る相手を選ぶ</>
+              ) : (
+                <>
+                  相手の盤面を<b>クリック</b>か <kbd>1</kbd>〜<kbd>9</kbd> キーで、おじゃまを送る相手を選ぶ
+                </>
+              )}
+            </span>
+            <span className="aim-intro-sub">
+              {vp.w < NARROW ? 'もう一度タップでおまかせ' : <><kbd>0</kbd> でおまかせ</>}（最後に攻撃してきた人へ反撃）
+            </span>
+          </div>
+        )}
         {out && !s.results && (
           <div className="board-panel board-panel-ko">
             <div className="ko-place num">{s.myPlace}位</div>
