@@ -70,6 +70,8 @@ export class Match {
   private alive: number;
   private rng: number;
   private rr = 0;
+  /** aim mode: attacker id → chosen target id */
+  private readonly aims = new Map<string, string>();
   private lastSnapshotAt = 0;
   finished = false;
   // ------------------------------------------------------------ pause state
@@ -304,15 +306,51 @@ export class Match {
     if (amount <= 0) return;
     const targets = [...this.players.values()].filter((t) => t.alive && t.id !== from.id);
     if (!targets.length) return;
-    const target =
-      this.settings.targeting === 'roundRobin'
-        ? targets[this.rr++ % targets.length]
-        : targets[this.random(targets.length)];
+    const target = this.pickTarget(from, targets);
     const chunk: GarbageChunk = { id: target.nextGarbageId++, lines: amount, hole: this.random(10) };
     target.unacked.set(chunk.id, { chunk, tick: this.serverTick(now), from: from.id });
     target.lastAttacker = from.id;
     this.host.send(target.id, { t: 'garbage', m: this.info.id, ...chunk, from: from.id });
     this.host.broadcast({ t: 'attack', m: this.info.id, from: from.id, to: target.id, lines: amount });
+  }
+
+  private pickTarget(from: MatchPlayer, targets: MatchPlayer[]): MatchPlayer {
+    if (this.settings.mode === 'aim') {
+      const chosen = this.players.get(this.aims.get(from.id) ?? '');
+      if (chosen?.alive && chosen !== from) return chosen;
+      // automatic: hit back at whoever hit you last, else anyone
+      const back = from.lastAttacker ? this.players.get(from.lastAttacker) : undefined;
+      if (back?.alive && back !== from) return back;
+    } else if (this.settings.targeting === 'roundRobin') {
+      return targets[this.rr++ % targets.length];
+    }
+    return targets[this.random(targets.length)];
+  }
+
+  // ------------------------------------------------------------ aim mode
+
+  aimsMsg(): ServerMsg {
+    return { t: 'aims', m: this.info.id, aims: Object.fromEntries(this.aims) };
+  }
+
+  /** A player picks (or clears, with null) the opponent that receives their garbage. */
+  setAim(fromId: string, toId: string | null) {
+    if (this.settings.mode !== 'aim' || this.finished) return;
+    const from = this.players.get(fromId);
+    if (!from?.alive) return;
+    const to = toId ? this.players.get(toId) : undefined;
+    const next = to && to.alive && to !== from ? to.id : null;
+    if ((this.aims.get(fromId) ?? null) === next) return;
+    if (next) this.aims.set(fromId, next);
+    else this.aims.delete(fromId);
+    this.host.broadcast(this.aimsMsg());
+  }
+
+  /** Drops aims from and at a player who is out. */
+  private clearAimsFor(id: string) {
+    let changed = this.aims.delete(id);
+    for (const [k, v] of this.aims) if (v === id) changed = this.aims.delete(k) || changed;
+    if (changed && this.settings.mode === 'aim') this.host.broadcast(this.aimsMsg());
   }
 
   // ------------------------------------------------------------ lifecycle
@@ -325,6 +363,7 @@ export class Match {
     p.diedTick = Math.min(p.game.tick, this.serverTick(now));
     p.dirty = true;
     this.alive--;
+    this.clearAimsFor(p.id);
     this.host.broadcast({ t: 'ko', m: this.info.id, id: p.id, place: p.place, by: p.lastAttacker });
     // if the player who paused is out, do not leave everyone frozen
     if (this.pausedBy === p.id && this.pausedAt !== null && this.resumeAt === null) this.beginResume(now);

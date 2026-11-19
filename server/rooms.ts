@@ -192,6 +192,7 @@ export class Room implements MatchHost {
     if (this.match && (this.phase === 'countdown' || this.phase === 'playing')) {
       p.conn?.send({ t: 'boards', m: this.match.info.id, s: this.match.allSnapshots() });
       if (this.match.isParticipant(p.id) && this.phase === 'playing') this.match.rejoin(p.id, this.now());
+      if (this.match.settings.mode === 'aim') p.conn?.send(this.match.aimsMsg());
     }
   }
 
@@ -214,6 +215,7 @@ export class Room implements MatchHost {
         if (this.phase !== 'lobby') return null;
         const s = msg.settings;
         const next = { ...this.settings };
+        if (s.mode !== undefined) next.mode = s.mode;
         if (s.attacks !== undefined) next.attacks = s.attacks;
         if (s.targeting !== undefined) next.targeting = s.targeting;
         if (s.attackPercent !== undefined) next.attackPercent = Math.min(200, Math.max(50, s.attackPercent));
@@ -232,6 +234,9 @@ export class Room implements MatchHost {
         this.broadcastRoom();
         return null;
       }
+      case 'aim':
+        if (this.phase !== 'lobby' && this.match) this.match.setAim(p.id, msg.id);
+        return null;
       case 'chat':
         return this.chatFrom(p, msg.text, msg.stamp);
       case 'start':

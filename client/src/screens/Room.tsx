@@ -533,22 +533,40 @@ function RulesPanel({ room, isHost, session }: { room: RoomView; isHost: boolean
           <button aria-pressed={st.attacks} onClick={() => set({ attacks: true })}>
             あり
           </button>
-          <button aria-pressed={!st.attacks} onClick={() => set({ attacks: false })}>
+          <button aria-pressed={!st.attacks} disabled={st.mode === 'aim'} onClick={() => set({ attacks: false })}>
             なし
           </button>
         </div>
       </div>
-      <div className="rule" data-off={!st.attacks}>
-        <span>攻撃先</span>
+      <div className="rule">
+        <span>モード</span>
         <div className="seg" role="group">
-          <button aria-pressed={st.targeting === 'random'} onClick={() => set({ targeting: 'random' })}>
-            ランダム
+          <button aria-pressed={st.mode === 'normal'} onClick={() => set({ mode: 'normal' })}>
+            ノーマル
           </button>
-          <button aria-pressed={st.targeting === 'roundRobin'} onClick={() => set({ targeting: 'roundRobin' })}>
-            順番
+          <button aria-pressed={st.mode === 'aim'} onClick={() => set({ mode: 'aim', attacks: true })}>
+            ねらい撃ち
           </button>
         </div>
       </div>
+      {st.mode === 'aim' && (
+        <p className="rule-help">
+          おじゃまを送る相手を自分で選びます。相手の盤面をクリックするか、数字キー 1〜9 で選択、0 で「おまかせ」（最後に攻撃してきた人へ反撃）。
+        </p>
+      )}
+      {st.mode === 'normal' && (
+        <div className="rule" data-off={!st.attacks}>
+          <span>攻撃先</span>
+          <div className="seg" role="group">
+            <button aria-pressed={st.targeting === 'random'} onClick={() => set({ targeting: 'random' })}>
+              ランダム
+            </button>
+            <button aria-pressed={st.targeting === 'roundRobin'} onClick={() => set({ targeting: 'roundRobin' })}>
+              順番
+            </button>
+          </div>
+        </div>
+      )}
       <div className="rule" data-off={!st.attacks}>
         <span>攻撃の強さ</span>
         <div className="seg" role="group">
@@ -636,6 +654,7 @@ function MiniBoard({
   color,
   mini,
   target,
+  aim,
 }: {
   session: RoomSession;
   id: string;
@@ -643,6 +662,8 @@ function MiniBoard({
   color: string;
   mini: number;
   target?: boolean;
+  /** aim mode: key number, and whether this player is aiming at you */
+  aim?: { key: number | null; atYou: boolean; onPick: () => void };
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -699,11 +720,27 @@ function MiniBoard({
 
   const small = mini < 9;
   return (
-    <div className="mini" ref={rootRef} data-small={small} data-target={target} data-pid={id}>
+    <div
+      className="mini"
+      ref={rootRef}
+      data-small={small}
+      data-target={target}
+      data-aimable={!!aim}
+      data-at-you={aim?.atYou}
+      data-pid={id}
+      onPointerDown={aim ? (e) => (e.preventDefault(), aim.onPick()) : undefined}
+      title={aim ? `${name} をねらう` : undefined}
+    >
       <div className="mini-head">
+        {aim?.key != null && <span className="mini-key num">{aim.key}</span>}
         <span className="mini-name" style={{ ['--seat' as string]: color }}>
           {name}
         </span>
+        {aim?.atYou && (
+          <span className="mini-at-you" title="あなたをねらっています">
+            ▶あなた
+          </span>
+        )}
         {!small && <span className="num mini-score" ref={scoreRef} />}
         {small && <span hidden ref={scoreRef} />}
       </div>
@@ -713,6 +750,7 @@ function MiniBoard({
         <span className="mini-hit num" ref={hitRef} />
       </div>
       <span className="mini-lines num" ref={linesRef} />
+      {target && <span className="mini-aim-tag">ねらい中</span>}
     </div>
   );
 }
@@ -724,6 +762,7 @@ function OpponentColumn({
   session,
   room,
   participants,
+  aimFor,
 }: {
   ids: string[];
   cols: number;
@@ -732,12 +771,22 @@ function OpponentColumn({
   room: RoomView;
   /** names as they were at match start (room.match is cleared once the match ends) */
   participants: { id: string; name: string }[];
+  /** aim mode only */
+  aimFor?: (id: string) => { target: boolean; aim: { key: number | null; atYou: boolean; onPick: () => void } };
 }) {
   const names = new Map(participants.map((p) => [p.id, p.name]));
   return (
     <div className="opp-col" style={{ gridTemplateColumns: `repeat(${cols}, ${mini * 10}px)` }}>
       {ids.map((id) => (
-        <MiniBoard key={id} session={session} id={id} name={names.get(id) ?? '?'} color={seatColor(room, id)} mini={mini} />
+        <MiniBoard
+          key={id}
+          session={session}
+          id={id}
+          name={names.get(id) ?? '?'}
+          color={seatColor(room, id)}
+          mini={mini}
+          {...(aimFor ? aimFor(id) : {})}
+        />
       ))}
     </div>
   );
@@ -921,9 +970,52 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
     };
   }, [session, s.you, s.runner]);
 
+  // ---- aim mode: pick who receives your garbage
+  const aimMode = room.settings.mode === 'aim' && !out && !s.results;
+  const order = [...layout.left, ...layout.right];
+  const myAim = s.aims[s.you] ?? null;
+  const aimedAtMe = Object.values(s.aims).filter((t) => t === s.you).length;
+  const orderRef = useRef(order);
+  orderRef.current = order;
+  useEffect(() => {
+    if (!aimMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const m = (e.code || '').match(/^(?:Digit|Numpad)(\d)$/) ?? e.key.match(/^(\d)$/);
+      if (!m) return;
+      const n = Number(m[1]);
+      if (n === 0) session.aim(null);
+      else if (orderRef.current[n - 1]) session.aim(orderRef.current[n - 1]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [aimMode, session]);
+  const aimFor = aimMode
+    ? (id: string) => {
+        const i = order.indexOf(id);
+        return {
+          target: myAim === id,
+          aim: {
+            key: i >= 0 && i < 9 ? i + 1 : null,
+            atYou: s.aims[id] === s.you,
+            onPick: () => session.aim(myAim === id ? null : id),
+          },
+        };
+      }
+    : undefined;
+  const aimName = myAim ? (info.find((p) => p.id === myAim)?.name ?? '?') : null;
+
   return (
     <div className="arena" ref={arenaRef}>
-      <OpponentColumn ids={layout.left} cols={layout.colsL} mini={layout.mini} session={session} room={room} participants={info} />
+      <OpponentColumn
+        ids={layout.left}
+        cols={layout.colsL}
+        mini={layout.mini}
+        session={session}
+        room={room}
+        participants={info}
+        aimFor={aimFor}
+      />
       <GameView
         source={source}
         cell={layout.cell}
@@ -931,7 +1023,23 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
         inputEnabled={!out && !s.results && !pause}
         onController={(k) => (session.keyboard = k)}
         mode="battle"
-        leftExtra={<div className="incoming" ref={incomingRef} aria-live="polite" />}
+        leftExtra={
+          <>
+            {aimMode && (
+              <div className="aim-status" aria-live="polite">
+                <span className="label">ねらい</span>
+                <b className="aim-who" data-auto={!aimName}>
+                  {aimName ?? 'おまかせ'}
+                </b>
+                <span className="aim-hint">{aimName ? '0 キーでおまかせ' : '反撃モード'}</span>
+                <span className="aim-threat" data-hot={aimedAtMe >= 2}>
+                  ねらわれ <b className="num">{aimedAtMe}</b>人
+                </span>
+              </div>
+            )}
+            <div className="incoming" ref={incomingRef} aria-live="polite" />
+          </>
+        }
       >
         {out && !s.results && (
           <div className="board-panel board-panel-ko">
@@ -977,7 +1085,15 @@ function Arena({ session, s, room }: { session: RoomSession; s: SessionState; ro
           </div>
         )}
       </GameView>
-      <OpponentColumn ids={layout.right} cols={layout.colsR} mini={layout.mini} session={session} room={room} participants={info} />
+      <OpponentColumn
+        ids={layout.right}
+        cols={layout.colsR}
+        mini={layout.mini}
+        session={session}
+        room={room}
+        participants={info}
+        aimFor={aimFor}
+      />
       {s.results && <Results results={s.results} you={s.you} room={room} session={session} />}
     </div>
   );

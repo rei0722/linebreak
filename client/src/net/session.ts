@@ -54,6 +54,8 @@ export interface SessionState {
   myPlace: number | null;
   /** Lobby chat, oldest first. */
   chat: ChatMsg[];
+  /** Aim mode: attacker id → chosen target id, for the current match. */
+  aims: Record<string, string>;
 }
 
 const FATAL: ErrorCode[] = ['ROOM_NOT_FOUND', 'ROOM_FULL', 'KICKED', 'VERSION'];
@@ -84,6 +86,7 @@ export class RoomSession {
       results: null,
       myPlace: null,
       chat: [],
+      aims: {},
     };
     this.conn.onStatus((status) => this.patch({ status }));
     this.conn.onOpen(() => this.hello());
@@ -128,7 +131,7 @@ export class RoomSession {
       () => this.keyboard?.heldInputs() ?? [],
     );
     this.boards.clear();
-    this.patch({ runner, results: null, myPlace: null });
+    this.patch({ runner, results: null, myPlace: null, aims: {} });
   }
 
   private onMessage(m: ServerMsg) {
@@ -169,6 +172,9 @@ export class RoomSession {
         if (m.id === this.state.you) this.patch({ myPlace: m.place });
         this.emit({ k: 'ko', id: m.id, place: m.place, by: m.by });
         break;
+      case 'aims':
+        if (this.state.runner?.info.id === m.m) this.patch({ aims: m.aims });
+        break;
       case 'attack':
         this.emit({ k: 'attack', from: m.from, to: m.to, lines: m.lines });
         break;
@@ -208,6 +214,11 @@ export class RoomSession {
   }
   resume() {
     this.conn.send({ t: 'resume' });
+  }
+  /** Aim mode: choose who receives my garbage (null = automatic). */
+  aim(id: string | null) {
+    if (this.state.aims[this.state.you] === id || (id === null && !this.state.aims[this.state.you])) return;
+    this.conn.send({ t: 'aim', id });
   }
   kick(id: string) {
     this.conn.send({ t: 'kick', id });

@@ -44,8 +44,11 @@ export interface ChatMsg {
 }
 
 export type Targeting = 'random' | 'roundRobin';
+/** normal: the server picks who gets your garbage. aim: every player picks a target themselves. */
+export type BattleMode = 'normal' | 'aim';
 
 export interface RoomSettings {
+  mode: BattleMode;
   /** Garbage attacks on/off. Survival without attacks is pure endurance. */
   attacks: boolean;
   targeting: Targeting;
@@ -55,6 +58,7 @@ export interface RoomSettings {
 }
 
 export const DEFAULT_SETTINGS: RoomSettings = {
+  mode: 'normal',
   attacks: true,
   targeting: 'random',
   attackPercent: 100,
@@ -170,6 +174,8 @@ export type ClientMsg =
   | { t: 'pause' }
   | { t: 'resume' }
   | { t: 'kick'; id: string }
+  /** aim mode: who receives my garbage (null = automatic: hit back at whoever hit me last) */
+  | { t: 'aim'; id: string | null }
   | { t: 'chat'; text?: string; stamp?: StampId }
   | { t: 'ping'; c: number }
   | {
@@ -209,6 +215,8 @@ export type ServerMsg =
   | { t: 'garbage'; m: number; id: number; lines: number; hole: number; from: string }
   | { t: 'boards'; m: number; s: BoardSnap[] }
   | { t: 'attack'; m: number; from: string; to: string; lines: number }
+  /** aim mode: every player's chosen target (players without a choice are absent) */
+  | { t: 'aims'; m: number; aims: Record<string, string> }
   | { t: 'ko'; m: number; id: string; place: number; by: string | null }
   | { t: 'end'; m: number; results: ResultRow[] };
 

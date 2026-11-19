@@ -26,6 +26,7 @@ const schema = z.discriminatedUnion('t', [
     t: z.literal('settings'),
     settings: z
       .object({
+        mode: z.enum(['normal', 'aim']),
         attacks: z.boolean(),
         targeting: z.enum(['random', 'roundRobin']),
         attackPercent: int,
@@ -37,6 +38,7 @@ const schema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('pause') }),
   z.object({ t: z.literal('resume') }),
   z.object({ t: z.literal('kick'), id: z.string().max(32) }),
+  z.object({ t: z.literal('aim'), id: z.string().max(32).nullable() }),
   z.object({ t: z.literal('chat'), text: z.string().max(400).optional(), stamp: z.enum(STAMP_IDS).optional() }),
   z.object({ t: z.literal('ping'), c: z.number() }),
   z.object({
