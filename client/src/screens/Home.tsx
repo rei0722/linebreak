@@ -54,7 +54,7 @@ function NewsBoard() {
     return new Set(NEWS.filter((n) => newest - Date.parse(n.date) <= 7 * 864e5).map((n) => n.id));
   });
   useEffect(() => markNewsSeen(), []);
-  const list = all ? NEWS : NEWS.slice(0, 3);
+  const list = all ? NEWS : NEWS.slice(0, 4);
   return (
     <section className="news" aria-labelledby="news-title">
       <header className="news-head">
@@ -80,7 +80,7 @@ function NewsBoard() {
           </li>
         ))}
       </ol>
-      {NEWS.length > 3 && (
+      {NEWS.length > 4 && (
         <button className="btn btn-quiet btn-sm news-more" onClick={() => setAll((v) => !v)}>
           {all ? '閉じる' : `すべて見る（${NEWS.length}件）`}
         </button>
