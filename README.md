@@ -79,6 +79,10 @@ See `.env.example`. A default single-service deployment needs **no settings at a
 | `PORT` | Runtime | Listen port (default 8787; usually set by the host) |
 | `HOST` | Runtime | Bind address (default `0.0.0.0`) |
 | `CREATOR_KEY` | Runtime | Secret for the creator badge in lobbies. Open the site once with `?creator=<value>` (`?creator=off` to forget it). Empty = no badge |
+| `STRIPE_SECRET_KEY` | Runtime | Turns on the ¥50 tip button (Stripe Checkout). Empty = no tips |
+| `SUPPORTER_SECRET` | Runtime | Signs supporter tokens for the red name tag. Never change it once set. Empty = derived from the Stripe key |
+| `PUBLIC_URL` | Runtime | Origin for Stripe's return URL. Empty = the page's own origin |
+| `TIP_MOCK` | Dev | `1` = fake payments for local testing (off when `NODE_ENV=production`) |
 | `ALLOWED_ORIGINS` | Runtime | Comma-separated origins allowed to connect to `/ws`. Empty allows any origin. Set it when the frontend runs on a different domain |
 | `STATIC_DIR` | Runtime | Directory with the built client (default `client/dist`) |
 | `VITE_SERVER_URL` | Build | Backend origin when frontend and backend are deployed separately, e.g. `https://linebreak-api.fly.dev` |
@@ -157,6 +161,11 @@ Latency isn't zero: opponent boards run behind by one-way delay plus up to 100 m
 - Sound effects (synthesized with WebAudio, toggle saved), handling settings (DAS/ARR/soft drop speed)
 - Arrow and Space keys don't scroll the page, OS key repeat is ignored, held keys are released when the window loses focus, and an empty `e.code` falls back to `e.key`
 - Responsive down to about 1280×720 (more compact below that)
+
+## Live count and tips
+
+- **Live count** (top bar): every open page pings `GET /api/stats?v=<random browser id>` every 20 s. `online` = browsers seen in the last 45 s, `playing` = connected players in a running match. Counts live in memory and reset on restart.
+- **¥50 tip** (`server/tips.ts`): `POST /api/tip/checkout` creates a Stripe Checkout Session (JPY 50) → Stripe's page → back to `/?tip=<session id>` → `POST /api/tip/claim` checks with Stripe that it is paid and returns a signed supporter token → the browser stores it and sends it on create/join → the lobby shows a red New Year name tag (寿 mark + 応援 badge, also in chat). No accounts: the tag belongs to the browser that paid.
 
 ## Not implemented / known limitations
 

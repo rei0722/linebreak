@@ -8,6 +8,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { ROOM_ID_RE } from '../shared/protocol';
 import { RoomManager, type Conn } from './rooms';
 import { parseClientMsg } from './schema';
+import { Presence, Tips, type TipConfig } from './tips';
 
 export interface ServerOptions {
   port: number;
@@ -15,6 +16,10 @@ export interface ServerOptions {
   staticDir?: string;
   /** Allowed browser origins for /ws. Empty = allow all. */
   allowedOrigins?: string[];
+  /** ¥50 tips. Off when no Stripe key (and no mock) is given. */
+  tips?: TipConfig;
+  /** Public origin used for Stripe's return URLs. Default: from the request's Host header. */
+  publicUrl?: string;
 }
 
 const MIME: Record<string, string> = {
@@ -36,6 +41,49 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
     'access-control-allow-origin': '*',
   });
   res.end(JSON.stringify(body));
+}
+
+function readBody(req: IncomingMessage, limit = 2048): Promise<string> {
+  return new Promise((ok, fail) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > limit) {
+        fail(new Error('too large'));
+        req.destroy();
+      } else chunks.push(c);
+    });
+    req.on('end', () => ok(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', fail);
+  });
+}
+
+/** Origin the browser used, for Stripe's success/cancel URLs. */
+function requestOrigin(req: IncomingMessage, fixed: string | undefined, allowed: string[]): string {
+  if (fixed) return fixed.replace(/\/+$/, '');
+  // The page's own origin (also right behind the Vite dev proxy and split deploys).
+  const origin = req.headers.origin;
+  if (origin && /^https?:\/\/[^/]+$/.test(origin) && (allowed.length === 0 || allowed.includes(origin))) return origin;
+  const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? 'localhost').split(',')[0].trim();
+  const fwd = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim();
+  const proto = fwd || (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+/** Small per-IP limiter for the paid endpoints (Stripe calls cost API quota). */
+function limiter(perMinute: number) {
+  const hits = new Map<string, number[]>();
+  return (req: IncomingMessage): boolean => {
+    const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim();
+    const now = Date.now();
+    const list = (hits.get(ip) ?? []).filter((t) => now - t < 60_000);
+    if (list.length >= perMinute) return false;
+    list.push(now);
+    hits.set(ip, list);
+    if (hits.size > 10_000) hits.clear();
+    return true;
+  };
 }
 
 function serveStatic(STATIC_DIR: string, req: IncomingMessage, res: ServerResponse) {
@@ -67,7 +115,10 @@ function serveStatic(STATIC_DIR: string, req: IncomingMessage, res: ServerRespon
 export async function startServer(opts: ServerOptions) {
   const STATIC_DIR = resolve(opts.staticDir ?? join(import.meta.dirname, '../client/dist'));
   const allowed = opts.allowedOrigins ?? [];
-  const manager = new RoomManager();
+  const tips = new Tips(opts.tips ?? {});
+  const presence = new Presence();
+  const manager = new RoomManager(Date.now, (t) => tips.verify(t));
+  const tipLimit = limiter(10);
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -83,6 +134,35 @@ export async function startServer(opts: ServerOptions) {
         maxPlayers: room.settings.maxPlayers,
         phase: room.phase,
       });
+    }
+    if (url.pathname === '/api/stats') {
+      presence.ping(url.searchParams.get('v'));
+      const { playing } = manager.stats();
+      return sendJson(res, 200, { online: Math.max(presence.count(), 1), playing, tips: tips.enabled });
+    }
+    if (url.pathname === '/api/tip/checkout' || url.pathname === '/api/tip/claim') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method' });
+      if (!tips.enabled) return sendJson(res, 404, { error: 'tips are off' });
+      if (!tipLimit(req)) return sendJson(res, 429, { error: 'rate limited' });
+      void (async () => {
+        try {
+          if (url.pathname === '/api/tip/checkout') {
+            return sendJson(res, 200, { url: await tips.checkout(requestOrigin(req, opts.publicUrl, allowed)) });
+          }
+          let body: { session?: unknown };
+          try {
+            body = JSON.parse((await readBody(req)) || '{}');
+          } catch {
+            return sendJson(res, 400, { error: 'bad request' });
+          }
+          const token = typeof body.session === 'string' ? await tips.claim(body.session) : null;
+          return token ? sendJson(res, 200, { token }) : sendJson(res, 402, { error: 'not paid' });
+        } catch (e) {
+          console.error('[tips]', (e as Error).message);
+          if (!res.headersSent) sendJson(res, 502, { error: 'payment provider error' });
+        }
+      })();
+      return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405).end();
@@ -165,6 +245,13 @@ if (import.meta.main) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
+    publicUrl: process.env.PUBLIC_URL || undefined,
+    tips: {
+      stripeKey: process.env.STRIPE_SECRET_KEY || undefined,
+      secret: process.env.SUPPORTER_SECRET || undefined,
+      // fake payments for local testing; never in production
+      mock: process.env.TIP_MOCK === '1' && process.env.NODE_ENV !== 'production',
+    },
   };
   const app = await startServer(opts);
   console.log(`[linebreak] listening on :${app.port}  (websocket: /ws)`);

@@ -57,6 +57,8 @@ interface RoomPlayer {
   spectator: boolean;
   wins: number;
   creator: boolean;
+  /** Tipped ¥50 (signed supporter token verified by the server). */
+  supporter: boolean;
   chatTokens: number;
   chatLast: number;
   joinedAt: number;
@@ -128,6 +130,7 @@ export class Room implements MatchHost {
           spectator: p.spectator,
           wins: p.wins,
           creator: p.creator,
+          supporter: p.supporter,
         })),
       settings: this.settings,
       match: this.match ? this.match.info : null,
@@ -144,7 +147,7 @@ export class Room implements MatchHost {
     return this.players.size >= this.settings.maxPlayers;
   }
 
-  add(conn: Conn, name: string, handling: Handling, creator = false): RoomPlayer {
+  add(conn: Conn, name: string, handling: Handling, creator = false, supporter = false): RoomPlayer {
     let id: string;
     do id = randomBytes(5).toString('hex');
     while (this.players.has(id));
@@ -158,6 +161,7 @@ export class Room implements MatchHost {
       spectator: this.phase !== 'lobby',
       wins: 0,
       creator,
+      supporter,
       chatTokens: CHAT_BURST,
       chatLast: this.now(),
       joinedAt: this.now() + this.players.size * 1e-3,
@@ -261,7 +265,7 @@ export class Room implements MatchHost {
     p.chatLast = now;
     if (p.chatTokens < 1) return err('RATE_LIMITED', 'チャットの送信が速すぎます。少し待ってください');
     p.chatTokens--;
-    const msg: ChatMsg = { id: ++this.chatCounter, from: p.id, name: p.name, creator: p.creator, at: now };
+    const msg: ChatMsg = { id: ++this.chatCounter, from: p.id, name: p.name, creator: p.creator, supporter: p.supporter, at: now };
     if (stamp) msg.stamp = stamp;
     else msg.text = text;
     this.chat.push(msg);
@@ -355,7 +359,11 @@ export class RoomManager {
   readonly rooms = new Map<string, Room>();
   private conns = new Map<number, ConnState>();
 
-  constructor(private now: () => number = Date.now) {}
+  constructor(
+    private now: () => number = Date.now,
+    /** Checks a supporter token (see tips.ts). */
+    private isSupporter: (token: string | undefined) => boolean = () => false,
+  ) {}
 
   newRoomId(): string {
     for (;;) {
@@ -411,6 +419,7 @@ export class RoomManager {
       this.leaveCurrent(st);
       const name = cleanName(msg.name);
       const creator = isCreatorKey(msg.key);
+      const supporter = this.isSupporter(msg.sup);
       const handling = clampHandling(msg.handling);
       let room: Room | undefined;
       if (msg.t === 'create') {
@@ -429,12 +438,13 @@ export class RoomManager {
         room.attach(p, conn);
         p.handling = handling;
         p.creator = creator;
+        p.supporter = supporter;
       } else {
         if (room.full) {
           conn.send(err('ROOM_FULL', `満員です（最大${room.settings.maxPlayers}人）`));
           return;
         }
-        p = room.add(conn, name, handling, creator);
+        p = room.add(conn, name, handling, creator, supporter);
       }
       st.room = room;
       st.player = p.id;
@@ -477,7 +487,11 @@ export class RoomManager {
 
   stats() {
     let players = 0;
-    for (const r of this.rooms.values()) players += r.players.size;
-    return { rooms: this.rooms.size, players, connections: this.conns.size };
+    let playing = 0;
+    for (const r of this.rooms.values()) {
+      players += r.players.size;
+      if (r.phase !== 'lobby') for (const p of r.players.values()) if (p.conn && !p.spectator) playing++;
+    }
+    return { rooms: this.rooms.size, players, playing, connections: this.conns.size };
   }
 }

@@ -9,7 +9,7 @@ import { COLORS, TOP_ROWS, drawMini, setupCanvas } from '../game/render';
 import { onlineSource } from '../game/sources';
 import { prefs } from '../prefs';
 import { RoomSession, inviteUrl, useSession, type SessionState } from '../net/session';
-import { ConnBadge, HandlingDialog, TopBar, navigate, toast, usePrefs, useViewport } from '../ui';
+import { ConnBadge, HandlingDialog, SupporterBadge, TopBar, navigate, toast, usePrefs, useViewport } from '../ui';
 import { NARROW, TOUCHPAD_H, boardCell } from './Solo';
 
 /** Stable colour per seat (join order), used for chips and mini-board names. */
@@ -402,10 +402,14 @@ function PlayerRow({
   const status = !p.connected ? '切断中' : p.spectator ? '次の対戦から' : p.host ? 'ホスト' : p.ready ? '準備完了' : '準備中';
   const tone = !p.connected ? 'off' : p.host ? 'host' : p.ready ? 'ready' : 'wait';
   return (
-    <li className="player" data-me={me} data-creator={p.creator}>
+    <li className="player" data-me={me} data-creator={p.creator} data-supporter={p.supporter && !p.creator}>
       {p.creator ? (
         <span className="creator-crown" aria-hidden>
           ♛
+        </span>
+      ) : p.supporter ? (
+        <span className="supporter-mark" aria-hidden>
+          寿
         </span>
       ) : (
         <span className="chip" style={{ background: color }} aria-hidden />
@@ -413,6 +417,7 @@ function PlayerRow({
       <span className="player-name">
         <span className="player-name-text">{p.name}</span>
         {p.creator && <CreatorBadge />}
+        {p.supporter && <SupporterBadge />}
         {me && <span className="tag-you">あなた</span>}
       </span>
       {p.wins > 0 && <span className="wins num">{p.wins}勝</span>}
@@ -469,6 +474,7 @@ function LobbyChat({ session, s, room }: { session: RoomSession; s: SessionState
               <span className="chat-name" style={m.creator ? undefined : { color: seatColor(room, m.from) }}>
                 {m.name}
                 {m.creator && <CreatorBadge small />}
+                {m.supporter && <SupporterBadge small />}
               </span>
               {st ? (
                 <span className="chat-stamp" title={st.label}>

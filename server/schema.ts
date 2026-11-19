@@ -8,7 +8,7 @@ const handling = z.object({ das: z.number(), arr: z.number(), sdf: z.number() })
 const name = z.string().max(64);
 
 const schema = z.discriminatedUnion('t', [
-  z.object({ t: z.literal('create'), name, handling, v: int, key: z.string().max(128).optional() }),
+  z.object({ t: z.literal('create'), name, handling, v: int, key: z.string().max(128).optional(), sup: z.string().max(300).optional() }),
   z.object({
     t: z.literal('join'),
     room: z.string().max(16),
@@ -17,6 +17,7 @@ const schema = z.discriminatedUnion('t', [
     token: z.string().max(64).optional(),
     v: int,
     key: z.string().max(128).optional(),
+    sup: z.string().max(300).optional(),
   }),
   z.object({ t: z.literal('leave') }),
   z.object({ t: z.literal('ready'), ready: z.boolean() }),

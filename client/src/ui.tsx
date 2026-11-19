@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { prefs, type Design, type FxQuality } from './prefs';
 import type { ConnStatus } from './net/connection';
+import { startTip, useIsSupporter, useSiteStats } from './net/site';
 
 // ------------------------------------------------------------ router
 
@@ -181,9 +182,106 @@ export function TopBar({ children }: { children?: ReactNode }) {
       <Wordmark />
       {children}
       <span className="topbar-spacer" />
+      <LiveCount />
+      <TipButton />
       <DisplayControls />
       <SoundToggle />
     </header>
+  );
+}
+
+// ------------------------------------------------------------ live count & tips
+
+/** "● 12人がオンライン（対戦中 4人）" — polled every 20 s from /api/stats. */
+export function LiveCount() {
+  const st = useSiteStats();
+  if (!st) return null;
+  return (
+    <span className="live-count" title={`いまサイトを開いている人 ${st.online}人／対戦中 ${st.playing}人`}>
+      <i className="live-dot" aria-hidden />
+      <b className="num">{st.online}</b>
+      <span className="live-label">人がオンライン</span>
+      <span className="live-playing">
+        対戦中 <b className="num">{st.playing}</b>
+      </span>
+    </span>
+  );
+}
+
+export function TipButton() {
+  const st = useSiteStats();
+  const isSup = useIsSupporter();
+  const [open, setOpen] = useState(false);
+  if (!st?.tips) return null;
+  return (
+    <>
+      <button
+        className="btn btn-sm tip-btn"
+        data-supporter={isSup}
+        onClick={(e) => {
+          e.currentTarget.blur();
+          setOpen(true);
+        }}
+        title="50円で応援する"
+      >
+        <span aria-hidden>🎍</span>
+        <span className="wide">{isSup ? '応援ありがとう' : '¥50で応援'}</span>
+      </button>
+      {open && <TipDialog supporter={isSup} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function TipDialog({ supporter, onClose }: { supporter: boolean; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await startTip();
+    } catch {
+      setBusy(false);
+      toast('支払い画面を開けませんでした。少し待ってからもう一度お試しください');
+    }
+  };
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog tip-dialog" role="dialog" aria-label="応援する" onClick={(e) => e.stopPropagation()}>
+        <h2>50円で応援する</h2>
+        <p className="tip-lede">
+          LINEBREAK を応援してくれた方には、お礼として対戦ロビーで<b>お正月の赤いネームタグ</b>が付きます。
+        </p>
+        <div className="tip-preview" aria-hidden>
+          <span className="player" data-supporter="true">
+            <span className="supporter-mark">寿</span>
+            <span className="player-name">
+              <span className="player-name-text">あなたの名前</span>
+              <SupporterBadge />
+            </span>
+          </span>
+        </div>
+        <ul className="tip-notes">
+          <li>支払いは Stripe の画面で行います（カード・Apple Pay など）。</li>
+          <li>ネームタグは、支払ったこのブラウザに付きます。</li>
+          {supporter && <li>すでにネームタグは付いています。もう一度応援することもできます。</li>}
+        </ul>
+        <div className="dialog-actions">
+          <button className="btn btn-primary tip-go" onClick={go} disabled={busy}>
+            {busy ? '支払い画面を開いています…' : '¥50 で応援する'}
+          </button>
+          <button className="btn btn-quiet" onClick={onClose}>
+            閉じる
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SupporterBadge({ small = false }: { small?: boolean }) {
+  return (
+    <span className="supporter-badge" data-small={small} title="50円で応援してくれた人">
+      応援
+    </span>
   );
 }
 

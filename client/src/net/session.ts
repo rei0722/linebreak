@@ -18,6 +18,7 @@ import {
 } from '../../../shared/protocol';
 import { Connection, type ConnStatus } from './connection';
 import { MatchRunner } from './matchRunner';
+import { supToken } from './site';
 
 export function serverBase(): string {
   const env = import.meta.env.VITE_SERVER_URL as string | undefined;
@@ -93,6 +94,7 @@ export class RoomSession {
     const p = prefs.get();
     const name = p.name || 'プレイヤー';
     const key = creatorKey.get();
+    const sup = supToken();
     if (this.roomId) {
       this.conn.send({
         t: 'join',
@@ -102,9 +104,10 @@ export class RoomSession {
         token: seat.get(this.roomId),
         v: PROTOCOL_VERSION,
         key,
+        sup,
       });
     } else {
-      this.conn.send({ t: 'create', name, handling: p.handling, v: PROTOCOL_VERSION, key });
+      this.conn.send({ t: 'create', name, handling: p.handling, v: PROTOCOL_VERSION, key, sup });
     }
   }
 

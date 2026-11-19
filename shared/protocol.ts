@@ -36,6 +36,8 @@ export interface ChatMsg {
   name: string;
   /** Sender is the site's creator (verified by the server). */
   creator: boolean;
+  /** Sender tipped (verified by the server). */
+  supporter?: boolean;
   at: number;
   text?: string;
   stamp?: StampId;
@@ -89,6 +91,8 @@ export interface PlayerView {
   wins: number;
   /** The site's creator, verified server-side with CREATOR_KEY. */
   creator: boolean;
+  /** Tipped ¥50: red New Year name tag in the lobby. */
+  supporter: boolean;
 }
 
 export interface RoomView {
@@ -156,8 +160,8 @@ export type ErrorCode =
 // ------------------------------------------------------------- client → server
 
 export type ClientMsg =
-  | { t: 'create'; name: string; handling: Handling; v: number; key?: string }
-  | { t: 'join'; room: string; name: string; handling: Handling; token?: string; v: number; key?: string }
+  | { t: 'create'; name: string; handling: Handling; v: number; key?: string; sup?: string }
+  | { t: 'join'; room: string; name: string; handling: Handling; token?: string; v: number; key?: string; sup?: string }
   | { t: 'leave' }
   | { t: 'ready'; ready: boolean }
   | { t: 'name'; name: string }
@@ -207,3 +211,13 @@ export type ServerMsg =
   | { t: 'attack'; m: number; from: string; to: string; lines: number }
   | { t: 'ko'; m: number; id: string; place: number; by: string | null }
   | { t: 'end'; m: number; results: ResultRow[] };
+
+/** GET /api/stats */
+export interface SiteStats {
+  /** Browsers with the site open in the last ~45 s. */
+  online: number;
+  /** Players in a running match. */
+  playing: number;
+  /** Tips are configured on this server. */
+  tips: boolean;
+}
